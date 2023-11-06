@@ -40,7 +40,7 @@ var codeSubcommands = []*cli.Command{
 
 func codeLinterNewGolang() error {
 	payload := `
-	linters:
+linters:
   enable:
     - megacheck
     - revive
