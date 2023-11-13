@@ -111,7 +111,10 @@ updates:
 		- "vitalvas"
 	assignees:
 		- "vitalvas"
+`
+	if err := os.MkdirAll(".github", 0755); err != nil {
+		return err
+	}
 
-	`
 	return tools.WriteStringToFile(".github/dependabot.yml", strings.TrimSpace(payload)+"\n")
 }
