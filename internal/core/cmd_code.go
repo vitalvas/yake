@@ -103,14 +103,14 @@ func codeGithubDependabotGolang() error {
 	payload := `
 version: 2
 updates:
-	- package-ecosystem: gomod
-	directory: "/"
-	schedule:
-		interval: monthly
-	reviewers:
-		- "vitalvas"
-	assignees:
-		- "vitalvas"
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+        interval: monthly
+    reviewers:
+        - "vitalvas"
+    assignees:
+        - "vitalvas"
 `
 	if err := os.MkdirAll(".github", 0755); err != nil {
 		return err
