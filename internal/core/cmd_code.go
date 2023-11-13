@@ -36,6 +36,32 @@ var codeSubcommands = []*cli.Command{
 			return nil
 		},
 	},
+	{
+		Name: "github-dependabot",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "lang",
+				Required: true,
+			},
+		},
+		Action: func(cCtx *cli.Context) error {
+			switch cCtx.String("lang") {
+			case "go":
+				if _, err := os.Stat(".github/dependabot.yml"); err == nil {
+					return fmt.Errorf("dependabot config file already exists")
+				}
+
+				if err := codeGithubDependabotGolang(); err != nil {
+					return err
+				}
+
+			default:
+				return fmt.Errorf("unsupported language: %s", cCtx.String("lang"))
+			}
+
+			return nil
+		},
+	},
 }
 
 func codeLinterNewGolang() error {
@@ -71,4 +97,21 @@ linters-settings:
       - G402
 `
 	return tools.WriteStringToFile(".golangci.yml", strings.TrimSpace(payload)+"\n")
+}
+
+func codeGithubDependabotGolang() error {
+	payload := `
+version: 2
+updates:
+	- package-ecosystem: gomod
+	directory: "/"
+	schedule:
+		interval: monthly
+	reviewers:
+		- "vitalvas"
+	assignees:
+		- "vitalvas"
+
+	`
+	return tools.WriteStringToFile(".github/dependabot.yml", strings.TrimSpace(payload)+"\n")
 }
