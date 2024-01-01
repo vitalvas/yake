@@ -2,7 +2,7 @@ module github.com/vitalvas/yake
 
 go 1.21.0
 
-require github.com/urfave/cli/v2 v2.25.7
+require github.com/urfave/cli/v2 v2.27.1
 
 require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
