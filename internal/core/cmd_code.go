@@ -3,10 +3,12 @@ package core
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/urfave/cli/v2"
+	"github.com/vitalvas/yake/internal/github"
+	"github.com/vitalvas/yake/internal/linter"
 	"github.com/vitalvas/yake/internal/tools"
+	"gopkg.in/yaml.v3"
 )
 
 var codeSubcommands = []*cli.Command{
@@ -65,56 +67,27 @@ var codeSubcommands = []*cli.Command{
 }
 
 func codeLinterNewGolang() error {
-	payload := `
-linters:
-  enable:
-    - megacheck
-    - revive
-    - govet
-    - unconvert
-    - megacheck
-    - gas
-    - gocyclo
-    - dupl
-    - misspell
-    - typecheck
-    - ineffassign
-    - stylecheck
-    - exportloopref
-    - gocritic
-    - nakedret
-    - gosimple
-    - prealloc
-    - staticcheck
-    - unused
-    - dogsled
-  fast: false
-  disable-all: true
+	payload := linter.GetGolangCI()
 
-linters-settings:
-  gosec:
-    excludes:
-      - G402
-`
-	return tools.WriteStringToFile(".golangci.yml", strings.TrimSpace(payload)+"\n")
+	data, err := yaml.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	return tools.WriteStringToFile(".golangci.yml", string(data))
 }
 
 func codeGithubDependabotGolang() error {
-	payload := `
-version: 2
-updates:
-  - package-ecosystem: gomod
-    directory: "/"
-    schedule:
-        interval: monthly
-    reviewers:
-        - "vitalvas"
-    assignees:
-        - "vitalvas"
-`
+	payload := github.GetGithub("go")
+
+	data, err := yaml.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(".github", 0755); err != nil {
 		return err
 	}
 
-	return tools.WriteStringToFile(".github/dependabot.yml", strings.TrimSpace(payload)+"\n")
+	return tools.WriteStringToFile(".github/dependabot.yml", string(data))
 }
