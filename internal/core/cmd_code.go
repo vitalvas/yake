@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -12,6 +13,27 @@ import (
 )
 
 var codeSubcommands = []*cli.Command{
+	{
+		Name: "defaults",
+		Action: func(cCtx *cli.Context) error {
+			if _, err := os.Stat(".github/dependabot.yml"); err != nil {
+				if err := codeGithubDependabotGolang(); err != nil {
+					return err
+				}
+			}
+
+			if _, err := os.Stat("go.mod"); err == nil {
+				if _, err := os.Stat(".golangci.yml"); err != nil {
+					if err := codeLinterNewGolang(); err != nil {
+						return err
+					}
+				}
+
+			}
+
+			return nil
+		},
+	},
 	{
 		Name: "linter-new",
 		Flags: []cli.Flag{
@@ -74,6 +96,8 @@ func codeLinterNewGolang() error {
 		return err
 	}
 
+	log.Println("Creating .golangci.yml")
+
 	return tools.WriteStringToFile(".golangci.yml", string(data))
 }
 
@@ -88,6 +112,8 @@ func codeGithubDependabotGolang() error {
 	if err := os.MkdirAll(".github", 0755); err != nil {
 		return err
 	}
+
+	log.Println("Creating .github/dependabot.yml")
 
 	return tools.WriteStringToFile(".github/dependabot.yml", string(data))
 }
