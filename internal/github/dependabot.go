@@ -20,6 +20,21 @@ type UpdatesSchedule struct {
 func GetGithub(lang string) Github {
 	data := Github{
 		Version: 2,
+		Updates: []Updates{
+			{
+				PackageEcosystem: "github-actions",
+				Directory:        "/",
+				Schedule: UpdatesSchedule{
+					Interval: "monthly",
+				},
+				Reviewers: []string{
+					"vitalvas",
+				},
+				Assignees: []string{
+					"vitalvas",
+				},
+			},
+		},
 	}
 
 	if lang == "go" {
@@ -37,20 +52,6 @@ func GetGithub(lang string) Github {
 			},
 		})
 	}
-
-	data.Updates = append(data.Updates, Updates{
-		PackageEcosystem: "github-actions",
-		Directory:        "/",
-		Schedule: UpdatesSchedule{
-			Interval: "monthly",
-		},
-		Reviewers: []string{
-			"vitalvas",
-		},
-		Assignees: []string{
-			"vitalvas",
-		},
-	})
 
 	return data
 }

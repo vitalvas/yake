@@ -9,26 +9,27 @@ import (
 	"github.com/vitalvas/yake/internal/github"
 	"github.com/vitalvas/yake/internal/linter"
 	"github.com/vitalvas/yake/internal/tools"
-	"gopkg.in/yaml.v3"
 )
 
 var codeSubcommands = []*cli.Command{
 	{
 		Name: "defaults",
 		Action: func(cCtx *cli.Context) error {
-			if _, err := os.Stat(".github/dependabot.yml"); err != nil {
-				if err := codeGithubDependabotGolang(); err != nil {
-					return err
-				}
-			}
+			var lang string
 
 			if _, err := os.Stat("go.mod"); err == nil {
 				if _, err := os.Stat(".golangci.yml"); err != nil {
+					lang = "go"
 					if err := codeLinterNewGolang(); err != nil {
 						return err
 					}
 				}
+			}
 
+			if _, err := os.Stat(".github/dependabot.yml"); err != nil {
+				if err := codeGithubDependabot(lang); err != nil {
+					return err
+				}
 			}
 
 			return nil
@@ -75,7 +76,7 @@ var codeSubcommands = []*cli.Command{
 					return fmt.Errorf("dependabot config file already exists")
 				}
 
-				if err := codeGithubDependabotGolang(); err != nil {
+				if err := codeGithubDependabot("go"); err != nil {
 					return err
 				}
 
@@ -91,23 +92,13 @@ var codeSubcommands = []*cli.Command{
 func codeLinterNewGolang() error {
 	payload := linter.GetGolangCI()
 
-	data, err := yaml.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
 	log.Println("Creating .golangci.yml")
 
-	return tools.WriteStringToFile(".golangci.yml", string(data))
+	return tools.WriteYamlFile(".golangci.yml", payload)
 }
 
-func codeGithubDependabotGolang() error {
-	payload := github.GetGithub("go")
-
-	data, err := yaml.Marshal(payload)
-	if err != nil {
-		return err
-	}
+func codeGithubDependabot(lang string) error {
+	payload := github.GetGithub(lang)
 
 	if err := os.MkdirAll(".github", 0755); err != nil {
 		return err
@@ -115,5 +106,5 @@ func codeGithubDependabotGolang() error {
 
 	log.Println("Creating .github/dependabot.yml")
 
-	return tools.WriteStringToFile(".github/dependabot.yml", string(data))
+	return tools.WriteYamlFile(".github/dependabot.yml", payload)
 }
