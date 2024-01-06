@@ -8,3 +8,11 @@ updates:
       - vitalvas
     assignees:
       - vitalvas
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    reviewers:
+      - vitalvas
+    assignees:
+      - vitalvas

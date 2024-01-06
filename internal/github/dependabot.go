@@ -17,7 +17,7 @@ type UpdatesSchedule struct {
 	Interval string `yaml:"interval"`
 }
 
-func GetGithub(lang string) Github {
+func GetGithub(lang Lang) Github {
 	data := Github{
 		Version: 2,
 		Updates: []Updates{
@@ -37,7 +37,7 @@ func GetGithub(lang string) Github {
 		},
 	}
 
-	if lang == "go" {
+	if lang == Golang {
 		data.Updates = append(data.Updates, Updates{
 			PackageEcosystem: "gomod",
 			Directory:        "/",

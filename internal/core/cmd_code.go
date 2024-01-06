@@ -15,11 +15,12 @@ var codeSubcommands = []*cli.Command{
 	{
 		Name: "defaults",
 		Action: func(cCtx *cli.Context) error {
-			var lang string
+			var lang github.Lang
 
 			if _, err := os.Stat("go.mod"); err == nil {
+				lang = github.Golang
+
 				if _, err := os.Stat(".golangci.yml"); err != nil {
-					lang = "go"
 					if err := codeLinterNewGolang(); err != nil {
 						return err
 					}
@@ -97,7 +98,7 @@ func codeLinterNewGolang() error {
 	return tools.WriteYamlFile(".golangci.yml", payload)
 }
 
-func codeGithubDependabot(lang string) error {
+func codeGithubDependabot(lang github.Lang) error {
 	payload := github.GetGithub(lang)
 
 	if err := os.MkdirAll(".github", 0755); err != nil {
