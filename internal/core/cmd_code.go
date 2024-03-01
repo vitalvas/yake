@@ -14,7 +14,7 @@ import (
 var codeSubcommands = []*cli.Command{
 	{
 		Name: "defaults",
-		Action: func(cCtx *cli.Context) error {
+		Action: func(_ *cli.Context) error {
 			var lang github.Lang
 
 			if _, err := os.Stat("go.mod"); err == nil {
