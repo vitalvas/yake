@@ -6,11 +6,16 @@ type Github struct {
 }
 
 type Updates struct {
-	PackageEcosystem string          `yaml:"package-ecosystem"`
-	Directory        string          `yaml:"directory,omitempty"`
-	Schedule         UpdatesSchedule `yaml:"schedule"`
-	Reviewers        []string        `yaml:"reviewers,omitempty"`
-	Assignees        []string        `yaml:"assignees,omitempty"`
+	PackageEcosystem string                   `yaml:"package-ecosystem"`
+	Directory        string                   `yaml:"directory,omitempty"`
+	Schedule         UpdatesSchedule          `yaml:"schedule"`
+	Reviewers        []string                 `yaml:"reviewers,omitempty"`
+	Assignees        []string                 `yaml:"assignees,omitempty"`
+	Groups           map[string]UpdatesGroups `yaml:"groups,omitempty"`
+}
+
+type UpdatesGroups struct {
+	Patterns []string `yaml:"patterns,omitempty"`
 }
 
 type UpdatesSchedule struct {
@@ -49,6 +54,13 @@ func GetGithub(lang Lang) Github {
 			},
 			Assignees: []string{
 				"vitalvas",
+			},
+			Groups: map[string]UpdatesGroups{
+				"dependencies": {
+					Patterns: []string{
+						"*",
+					},
+				},
 			},
 		})
 	}
