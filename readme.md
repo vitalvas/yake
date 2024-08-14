@@ -3,5 +3,5 @@
 ## Installation
 
 ```bash
-go install github.com/vitalvas/yake@latest
+GOPRIVATE=github.com/vitalvas/yake go install -v github.com/vitalvas/yake@latest
 ```
