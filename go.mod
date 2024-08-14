@@ -1,6 +1,6 @@
 module github.com/vitalvas/yake
 
-go 1.21.0
+go 1.22
 
 require (
 	github.com/urfave/cli/v2 v2.27.4
