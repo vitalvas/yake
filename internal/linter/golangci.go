@@ -1,5 +1,9 @@
 package linter
 
+import (
+	"slices"
+)
+
 type GolangCI struct {
 	Linters struct {
 		Enable     []string `yaml:"enable,omitempty"`
@@ -19,13 +23,11 @@ func GetGolangCI() GolangCI {
 		"dogsled",
 		"dupl",
 		"exportloopref",
-		"gas",
 		"gocritic",
 		"gocyclo",
 		"gosimple",
 		"govet",
 		"ineffassign",
-		"megacheck",
 		"megacheck",
 		"misspell",
 		"nakedret",
@@ -37,6 +39,9 @@ func GetGolangCI() GolangCI {
 		"unconvert",
 		"unused",
 	}
+
+	slices.Sort(data.Linters.Enable)
+
 	data.Linters.Fast = false
 	data.Linters.DisableAll = true
 
