@@ -28,7 +28,6 @@ func GetGolangCI() GolangCI {
 		"gosimple",
 		"govet",
 		"ineffassign",
-		"megacheck",
 		"misspell",
 		"nakedret",
 		"prealloc",
