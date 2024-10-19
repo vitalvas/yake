@@ -20,9 +20,9 @@ type GolangCI struct {
 func GetGolangCI() GolangCI {
 	data := GolangCI{}
 	data.Linters.Enable = []string{
+		"copyloopvar",
 		"dogsled",
 		"dupl",
-		"exportloopref",
 		"gocritic",
 		"gocyclo",
 		"gosimple",
