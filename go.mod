@@ -3,7 +3,7 @@ module github.com/vitalvas/yake
 go 1.22
 
 require (
-	github.com/urfave/cli/v2 v2.27.5
+	github.com/urfave/cli/v2 v2.27.6
 	gopkg.in/yaml.v3 v3.0.1
 )
 
