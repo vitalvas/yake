@@ -5,34 +5,34 @@ import (
 )
 
 type GolangCI struct {
-	Version    string             `yaml:"version"`
-	Linters    GolangCILinter     `yaml:"linters"`
-	Formatters GolangCIFormatters `yaml:"formatters"`
+	Version    string             `yaml:"version,omitempty"`
+	Linters    GolangCILinter     `yaml:"linters,omitempty"`
+	Formatters GolangCIFormatters `yaml:"formatters,omitempty"`
 }
 
 type GolangCILinter struct {
-	Default    string                 `yaml:"default"`
+	Default    string                 `yaml:"default,omitempty"`
 	Enable     []string               `yaml:"enable,omitempty"`
-	Settings   GolangCILinterSettings `yaml:"settings"`
-	Exclusions GolangCIExclusions     `yaml:"exclusions"`
+	Settings   GolangCILinterSettings `yaml:"settings,omitempty"`
+	Exclusions GolangCIExclusions     `yaml:"exclusions,omitempty"`
 }
 
 type GolangCILinterSettings struct {
-	GoSec GolangCILinterSettingsGosec `yaml:"gosec"`
+	GoSec GolangCILinterSettingsGosec `yaml:"gosec,omitempty"`
 }
 
 type GolangCILinterSettingsGosec struct {
-	Excludes []string `yaml:"excludes"`
+	Excludes []string `yaml:"excludes,omitempty"`
 }
 
 type GolangCIFormatters struct {
-	Exclusions GolangCIExclusions `yaml:"exclusions"`
+	Exclusions GolangCIExclusions `yaml:"exclusions,omitempty"`
 }
 
 type GolangCIExclusions struct {
-	Generated string   `yaml:"generated"`
-	Presets   []string `yaml:"presets"`
-	Paths     []string `yaml:"paths"`
+	Generated string   `yaml:"generated,omitempty"`
+	Presets   []string `yaml:"presets,omitempty"`
+	Paths     []string `yaml:"paths,omitempty"`
 }
 
 func GetGolangCI() GolangCI {

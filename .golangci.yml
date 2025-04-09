@@ -35,7 +35,6 @@ linters:
 formatters:
   exclusions:
     generated: lax
-    presets: []
     paths:
       - builtin$
       - examples$
