@@ -5,48 +5,99 @@ import (
 )
 
 type GolangCI struct {
-	Linters struct {
-		Enable     []string `yaml:"enable,omitempty"`
-		Fast       bool     `yaml:"fast"`
-		DisableAll bool     `yaml:"disable-all,omitempty"`
-	} `yaml:"linters"`
-	LintersSettings struct {
-		GoSec struct {
-			Excludes []string `yaml:"excludes"`
-		} `yaml:"gosec"`
-	} `yaml:"linters-settings"`
+	Version    string             `yaml:"version"`
+	Linters    GolangCILinter     `yaml:"linters"`
+	Formatters GolangCIFormatters `yaml:"formatters"`
+}
+
+type GolangCILinter struct {
+	Default    string                 `yaml:"default"`
+	Enable     []string               `yaml:"enable,omitempty"`
+	Settings   GolangCILinterSettings `yaml:"settings"`
+	Exclusions GolangCIExclusions     `yaml:"exclusions"`
+}
+
+type GolangCILinterSettings struct {
+	GoSec GolangCILinterSettingsGosec `yaml:"gosec"`
+}
+
+type GolangCILinterSettingsGosec struct {
+	Excludes []string `yaml:"excludes"`
+}
+
+type GolangCIFormatters struct {
+	Exclusions GolangCIExclusions `yaml:"exclusions"`
+}
+
+type GolangCIExclusions struct {
+	Generated string   `yaml:"generated"`
+	Presets   []string `yaml:"presets"`
+	Paths     []string `yaml:"paths"`
 }
 
 func GetGolangCI() GolangCI {
-	data := GolangCI{}
-	data.Linters.Enable = []string{
-		"copyloopvar",
-		"dogsled",
-		"dupl",
-		"gocritic",
-		"gocyclo",
-		"gosimple",
-		"govet",
-		"ineffassign",
-		"misspell",
-		"nakedret",
-		"prealloc",
-		"revive",
-		"staticcheck",
-		"stylecheck",
-		"typecheck",
-		"unconvert",
-		"unused",
+	data := GolangCI{
+		Version: "2",
+		Linters: GolangCILinter{
+			Default: "none",
+			Enable: []string{
+				"copyloopvar",
+				"dogsled",
+				"dupl",
+				"gocritic",
+				"gocyclo",
+				"govet",
+				"ineffassign",
+				"misspell",
+				"nakedret",
+				"prealloc",
+				"revive",
+				"staticcheck",
+				"unconvert",
+				"unused",
+			},
+			Settings: GolangCILinterSettings{
+				GoSec: GolangCILinterSettingsGosec{
+					Excludes: []string{
+						"G402",
+					},
+				},
+			},
+			Exclusions: GolangCIExclusions{
+				Generated: "lax",
+				Presets: []string{
+					"comments",
+					"common-false-positives",
+					"legacy",
+					"std-error-handling",
+				},
+				Paths: []string{
+					"third_party$",
+					"vendor$",
+					"builtin$",
+					"examples$",
+				},
+			},
+		},
+		Formatters: GolangCIFormatters{
+			Exclusions: GolangCIExclusions{
+				Generated: "lax",
+				Paths: []string{
+					"third_party$",
+					"vendor$",
+					"builtin$",
+					"examples$",
+				},
+			},
+		},
 	}
 
 	slices.Sort(data.Linters.Enable)
-
-	data.Linters.Fast = false
-	data.Linters.DisableAll = true
-
-	data.LintersSettings.GoSec.Excludes = []string{
-		"G402",
-	}
+	slices.Sort(data.Linters.Exclusions.Presets)
+	slices.Sort(data.Linters.Exclusions.Paths)
+	slices.Sort(data.Formatters.Exclusions.Presets)
+	slices.Sort(data.Formatters.Exclusions.Paths)
+	slices.Sort(data.Linters.Settings.GoSec.Excludes)
 
 	return data
 }

@@ -1,13 +1,21 @@
 package tools
 
-import "os"
+import (
+	"log"
+	"os"
+)
 
 func WriteStringToFile(fileName string, content string) error {
 	file, err := os.Create(fileName)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	if _, err := file.WriteString(content); err != nil {
 		return err

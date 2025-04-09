@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"log"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -12,7 +13,11 @@ func WriteYamlFile(filename string, data interface{}) error {
 		return err
 	}
 
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	enc := yaml.NewEncoder(f)
 	enc.SetIndent(2)
