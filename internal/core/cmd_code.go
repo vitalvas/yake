@@ -15,10 +15,7 @@ var codeSubcommands = []*cli.Command{
 	{
 		Name: "defaults",
 		Action: func(_ *cli.Context) error {
-			var lang github.Lang
-
 			if _, err := os.Stat("go.mod"); err == nil {
-				lang = github.Golang
 
 				if _, err := os.Stat(".golangci.yml"); err != nil {
 					if err := codeLinterNewGolang(); err != nil {
@@ -26,13 +23,6 @@ var codeSubcommands = []*cli.Command{
 					}
 				}
 			}
-
-			if _, err := os.Stat(".github/dependabot.yml"); err != nil {
-				if err := codeGithubDependabot(lang); err != nil {
-					return err
-				}
-			}
-
 			return nil
 		},
 	},
