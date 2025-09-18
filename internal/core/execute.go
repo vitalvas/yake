@@ -2,24 +2,29 @@ package core
 
 import (
 	"log"
-	"os"
 
-	"github.com/urfave/cli/v2"
+	"github.com/spf13/cobra"
 )
 
 func Execute() {
-	app := &cli.App{
-		Name:  "yake",
-		Usage: "Yet Another ToolKit",
-		Commands: []*cli.Command{
-			{
-				Name:        "code",
-				Subcommands: codeSubcommands,
-			},
-		},
+	rootCmd := &cobra.Command{
+		Use:   "yake",
+		Short: "Yet Another ToolKit",
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	codeCmd := &cobra.Command{
+		Use:   "code",
+		Short: "Code-related commands",
+	}
+
+	// Add code subcommands
+	for _, subCmd := range codeSubcommands {
+		codeCmd.AddCommand(subCmd)
+	}
+
+	rootCmd.AddCommand(codeCmd)
+
+	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}
 }
