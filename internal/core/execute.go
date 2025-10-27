@@ -23,6 +23,7 @@ func Execute() {
 	}
 
 	rootCmd.AddCommand(codeCmd)
+	rootCmd.AddCommand(createTestsCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
