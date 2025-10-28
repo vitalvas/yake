@@ -37,7 +37,7 @@ func runGoTests() error {
 	}
 
 	for _, cmdInfo := range commands {
-		log.Printf("Running: %s %v", cmdInfo.name, cmdInfo.args)
+		log.Printf("Running: %v", append([]string{cmdInfo.name}, cmdInfo.args...))
 
 		cmd := exec.Command(cmdInfo.name, cmdInfo.args...)
 		cmd.Stdout = os.Stdout
