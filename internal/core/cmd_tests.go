@@ -30,6 +30,7 @@ func runGoTests() error {
 		name string
 		args []string
 	}{
+		{name: "go", args: []string{"fmt", "./..."}},
 		{name: "go", args: []string{"clean", "-testcache"}},
 		{name: "go", args: []string{"test", "-cover", "./..."}},
 		{name: "go", args: []string{"test", "-race", "./..."}},
