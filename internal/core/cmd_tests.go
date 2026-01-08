@@ -25,16 +25,23 @@ func createTestsCommand() *cobra.Command {
 	return cmd
 }
 
+type command struct {
+	name string
+	args []string
+}
+
 func runGoTests() error {
-	commands := []struct {
-		name string
-		args []string
-	}{
+	commands := []command{
 		{name: "go", args: []string{"fmt", "./..."}},
+		{name: "go", args: []string{"vet", "./..."}},
+		{name: "go", args: []string{"mod", "tidy", "-v"}},
 		{name: "go", args: []string{"clean", "-testcache"}},
 		{name: "go", args: []string{"test", "-cover", "./..."}},
 		{name: "go", args: []string{"test", "-race", "./..."}},
-		{name: "golangci-lint", args: []string{"run"}},
+	}
+
+	if _, err := os.Stat(".golangci.yml"); err == nil {
+		commands = append(commands, command{name: "golangci-lint", args: []string{"run"}})
 	}
 
 	for _, cmdInfo := range commands {
@@ -45,7 +52,7 @@ func runGoTests() error {
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to run %s %v: %w", cmdInfo.name, cmdInfo.args, err)
+			return fmt.Errorf("failed to run %s: %w", append([]string{cmdInfo.name}, cmdInfo.args...), err)
 		}
 	}
 
