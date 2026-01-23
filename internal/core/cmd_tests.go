@@ -15,7 +15,13 @@ func createTestsCommand() *cobra.Command {
 		Short: "Run Go tests with coverage, race detection, and linting",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if _, err := os.Stat("go.mod"); err == nil {
-				return runGoTests()
+				if err := runGoTests(); err != nil {
+					return err
+				}
+			}
+
+			if err := runGoreleaserCheck(); err != nil {
+				return err
 			}
 
 			return nil
@@ -45,18 +51,38 @@ func runGoTests() error {
 	}
 
 	for _, cmdInfo := range commands {
-		log.Printf("Running: %v", append([]string{cmdInfo.name}, cmdInfo.args...))
-
-		cmd := exec.Command(cmdInfo.name, cmdInfo.args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to run %s: %w", append([]string{cmdInfo.name}, cmdInfo.args...), err)
+		if err := runCommand(cmdInfo.name, cmdInfo.args...); err != nil {
+			return err
 		}
 	}
 
 	log.Println("All tests completed successfully")
 
 	return nil
+}
+
+func runCommand(name string, args ...string) error {
+	log.Printf("Running: %v", append([]string{name}, args...))
+
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run %s: %w", append([]string{name}, args...), err)
+	}
+
+	return nil
+}
+
+func runGoreleaserCheck() error {
+	if _, err := os.Stat(".goreleaser.yml"); err != nil {
+		return nil
+	}
+
+	if _, err := exec.LookPath("goreleaser"); err != nil {
+		return nil
+	}
+
+	return runCommand("goreleaser", "check")
 }
