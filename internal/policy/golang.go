@@ -71,6 +71,11 @@ func CheckTestFileNaming() error {
 				violations = append(violations,
 					fmt.Sprintf("  - %s: file imports 'testing' but is not named '{origin}_test.go' or '{origin}_e2e_test.go'", path))
 			}
+
+			if HasSignificantFunctions(path) {
+				fileViolations := ValidateSourceFile(path)
+				violations = append(violations, fileViolations...)
+			}
 		}
 
 		return nil
@@ -135,6 +140,24 @@ func ValidateTestFileName(testPath string) []string {
 	return violations
 }
 
+func ValidateSourceFile(sourcePath string) []string {
+	var violations []string
+
+	filename := filepath.Base(sourcePath)
+	dir := filepath.Dir(sourcePath)
+
+	baseName := strings.TrimSuffix(filename, ".go")
+	testFile := baseName + "_test.go"
+	testPath := filepath.Join(dir, testFile)
+
+	if _, err := os.Stat(testPath); os.IsNotExist(err) {
+		violations = append(violations,
+			fmt.Sprintf("  - %s: missing test file '%s'", sourcePath, testPath))
+	}
+
+	return violations
+}
+
 func HasTestingImport(filePath string) bool {
 	fset := token.NewFileSet()
 
@@ -164,6 +187,35 @@ func HasFunctions(filePath string) bool {
 	for _, decl := range node.Decls {
 		if _, ok := decl.(*ast.FuncDecl); ok {
 			return true
+		}
+	}
+
+	return false
+}
+
+const minFunctionLines = 3
+
+func HasSignificantFunctions(filePath string) bool {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, 0)
+	if err != nil {
+		return false
+	}
+
+	for _, decl := range node.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			if fn.Body == nil {
+				continue
+			}
+
+			startLine := fset.Position(fn.Body.Lbrace).Line
+			endLine := fset.Position(fn.Body.Rbrace).Line
+			lines := endLine - startLine + 1
+
+			if lines > minFunctionLines {
+				return true
+			}
 		}
 	}
 

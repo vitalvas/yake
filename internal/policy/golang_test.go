@@ -173,6 +173,37 @@ func TestValidateTestFileName(t *testing.T) {
 	})
 }
 
+func TestValidateSourceFile(t *testing.T) {
+	t.Run("valid source file with test", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("service.go", []byte("package main\nfunc Foo() {}"), 0644))
+		require.NoError(t, os.WriteFile("service_test.go", []byte(validTestFile), 0644))
+
+		violations := ValidateSourceFile("service.go")
+		assert.Empty(t, violations)
+	})
+
+	t.Run("source file missing test", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("auth_cache.go", []byte("package main\nfunc Foo() {}"), 0644))
+
+		violations := ValidateSourceFile("auth_cache.go")
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "missing test file")
+		assert.Contains(t, violations[0], "auth_cache_test.go")
+	})
+}
+
 func TestHasTestingImport(t *testing.T) {
 	t.Run("returns true when testing is imported", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -236,6 +267,60 @@ func TestHasFunctions(t *testing.T) {
 
 	t.Run("returns false for non-existent file", func(t *testing.T) {
 		assert.False(t, HasFunctions("/non/existent/file.go"))
+	})
+}
+
+func TestHasSignificantFunctions(t *testing.T) {
+	t.Run("returns true for function with more than 3 lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := `package main
+
+func Process() error {
+	x := 1
+	y := 2
+	z := x + y
+	return nil
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.True(t, HasSignificantFunctions(filePath))
+	})
+
+	t.Run("returns false for function with 3 or less lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "main.go")
+
+		code := `package main
+
+func main() {
+	core.Execute()
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.False(t, HasSignificantFunctions(filePath))
+	})
+
+	t.Run("returns false for file with only structs", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "models.go")
+
+		code := `package main
+
+type User struct {
+	ID int
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.False(t, HasSignificantFunctions(filePath))
+	})
+
+	t.Run("returns false for non-existent file", func(t *testing.T) {
+		assert.False(t, HasSignificantFunctions("/non/existent/file.go"))
 	})
 }
 
@@ -444,6 +529,73 @@ func TestCheckTestFileNaming(t *testing.T) {
 		err := CheckTestFileNaming()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imports 'testing' but is not named '{origin}_test.go' or '{origin}_e2e_test.go'")
+	})
+
+	t.Run("fails when source file with functions missing test file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		sourceCode := `package main
+
+func AuthCache() error {
+	cache := make(map[string]string)
+	cache["key"] = "value"
+	return nil
+}
+`
+		require.NoError(t, os.WriteFile("auth_cache.go", []byte(sourceCode), 0644))
+
+		err := CheckTestFileNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing test file")
+		assert.Contains(t, err.Error(), "auth_cache_test.go")
+	})
+
+	t.Run("skips source file with only structs no functions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		sourceCode := `package main
+
+type User struct {
+	ID   int
+	Name string
+}
+
+type Config struct {
+	Host string
+	Port int
+}
+`
+		require.NoError(t, os.WriteFile("models.go", []byte(sourceCode), 0644))
+
+		err := CheckTestFileNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips source file with small functions less than 3 lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		sourceCode := `package main
+
+func main() {
+	core.Execute()
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(sourceCode), 0644))
+
+		err := CheckTestFileNaming()
+		assert.NoError(t, err)
 	})
 }
 
