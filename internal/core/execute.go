@@ -2,14 +2,17 @@ package core
 
 import (
 	"log"
+	"os"
 
 	"github.com/spf13/cobra"
 )
 
 func Execute() {
 	rootCmd := &cobra.Command{
-		Use:   "yake",
-		Short: "Yet Another ToolKit",
+		Use:           "yake",
+		Short:         "Yet Another ToolKit",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	codeCmd := &cobra.Command{
@@ -24,8 +27,10 @@ func Execute() {
 
 	rootCmd.AddCommand(codeCmd)
 	rootCmd.AddCommand(createTestsCommand())
+	rootCmd.AddCommand(createPolicyCommand())
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		os.Exit(1)
 	}
 }
