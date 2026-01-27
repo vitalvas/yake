@@ -23,11 +23,11 @@ func RunGolangChecks() error {
 
 	var allErrors []string
 
-	if err := CheckTestFileNaming(); err != nil {
+	if err := checkTestFileNaming(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
 
-	if err := CheckCoverage(); err != nil {
+	if err := checkCoverage(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
 
@@ -38,7 +38,7 @@ func RunGolangChecks() error {
 	return nil
 }
 
-func CheckTestFileNaming() error {
+func checkTestFileNaming() error {
 	log.Println("Checking test file naming conventions...")
 
 	var violations []string
@@ -64,16 +64,16 @@ func CheckTestFileNaming() error {
 		isTestFile := strings.HasSuffix(path, "_test.go")
 
 		if isTestFile {
-			fileViolations := ValidateTestFileName(path)
+			fileViolations := validateTestFileName(path)
 			violations = append(violations, fileViolations...)
 		} else {
-			if HasTestingImport(path) {
+			if hasTestingImport(path) {
 				violations = append(violations,
 					fmt.Sprintf("  - %s: file imports 'testing' but is not named '{origin}_test.go' or '{origin}_e2e_test.go'", path))
 			}
 
-			if HasSignificantFunctions(path) {
-				fileViolations := ValidateSourceFile(path)
+			if hasSignificantFunctions(path) {
+				fileViolations := validateSourceFile(path)
 				violations = append(violations, fileViolations...)
 			}
 		}
@@ -92,8 +92,8 @@ func CheckTestFileNaming() error {
 	return nil
 }
 
-func ValidateTestFileName(testPath string) []string {
-	if !HasFunctions(testPath) {
+func validateTestFileName(testPath string) []string {
+	if !hasFunctions(testPath) {
 		return nil
 	}
 
@@ -133,14 +133,18 @@ func ValidateTestFileName(testPath string) []string {
 		violations = append(violations, fmt.Sprintf("  - %s: missing source file '%s'", testPath, sourcePath))
 	}
 
-	if !HasTestingImport(testPath) {
+	if !hasTestingImport(testPath) {
 		violations = append(violations, fmt.Sprintf("  - %s: missing 'testing' package import", testPath))
 	}
 
 	return violations
 }
 
-func ValidateSourceFile(sourcePath string) []string {
+func validateSourceFile(sourcePath string) []string {
+	if hasSkipDirective(sourcePath) {
+		return nil
+	}
+
 	var violations []string
 
 	filename := filepath.Base(sourcePath)
@@ -158,7 +162,41 @@ func ValidateSourceFile(sourcePath string) []string {
 	return violations
 }
 
-func HasTestingImport(filePath string) bool {
+const skipDirective = "//yake:skip-test"
+
+func hasSkipDirective(filePath string) bool {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "//") {
+			if strings.HasPrefix(line, skipDirective) {
+				return true
+			}
+
+			continue
+		}
+
+		if strings.HasPrefix(line, "package ") {
+			break
+		}
+	}
+
+	return false
+}
+
+func hasTestingImport(filePath string) bool {
 	fset := token.NewFileSet()
 
 	node, err := parser.ParseFile(fset, filePath, nil, parser.ImportsOnly)
@@ -176,7 +214,7 @@ func HasTestingImport(filePath string) bool {
 	return false
 }
 
-func HasFunctions(filePath string) bool {
+func hasFunctions(filePath string) bool {
 	fset := token.NewFileSet()
 
 	node, err := parser.ParseFile(fset, filePath, nil, 0)
@@ -195,7 +233,7 @@ func HasFunctions(filePath string) bool {
 
 const minFunctionLines = 3
 
-func HasSignificantFunctions(filePath string) bool {
+func hasSignificantFunctions(filePath string) bool {
 	fset := token.NewFileSet()
 
 	node, err := parser.ParseFile(fset, filePath, nil, 0)
@@ -222,7 +260,7 @@ func HasSignificantFunctions(filePath string) bool {
 	return false
 }
 
-func CheckCoverage() error {
+func checkCoverage() error {
 	log.Println("Checking code coverage (minimum 80% per package)...")
 
 	cmd := exec.Command("go", "test", "-cover", "./...")
@@ -236,7 +274,7 @@ func CheckCoverage() error {
 		return fmt.Errorf("failed to run coverage check: %w", err)
 	}
 
-	violations, err := ParseCoverageOutput(stdout.String())
+	violations, err := parseCoverageOutput(stdout.String())
 	if err != nil {
 		return err
 	}
@@ -249,7 +287,7 @@ func CheckCoverage() error {
 	return nil
 }
 
-func ParseCoverageOutput(output string) ([]string, error) {
+func parseCoverageOutput(output string) ([]string, error) {
 	var violations []string
 
 	coverageRegex := regexp.MustCompile(`ok\s+(\S+)\s+(?:[\d.]+s|\(cached\))\s+coverage:\s+([\d.]+)%`)
