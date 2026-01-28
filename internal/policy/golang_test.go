@@ -337,7 +337,7 @@ func main() {}
 }
 
 func Test_hasSignificantFunctions(t *testing.T) {
-	t.Run("returns true for function with more than 3 lines", func(t *testing.T) {
+	t.Run("returns true for function with more than 5 lines", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "service.go")
 
@@ -347,6 +347,8 @@ func Process() error {
 	x := 1
 	y := 2
 	z := x + y
+	w := z * 2
+	v := w + 1
 	return nil
 }
 `
@@ -355,7 +357,7 @@ func Process() error {
 		assert.True(t, hasSignificantFunctions(filePath))
 	})
 
-	t.Run("returns false for function with 3 or less lines", func(t *testing.T) {
+	t.Run("returns false for function with 5 or less lines", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "main.go")
 
@@ -609,6 +611,9 @@ func Test_checkTestFileNaming(t *testing.T) {
 func AuthCache() error {
 	cache := make(map[string]string)
 	cache["key"] = "value"
+	cache["key2"] = "value2"
+	cache["key3"] = "value3"
+	_ = cache
 	return nil
 }
 `
@@ -645,7 +650,7 @@ type Config struct {
 		assert.NoError(t, err)
 	})
 
-	t.Run("skips source file with small functions less than 3 lines", func(t *testing.T) {
+	t.Run("skips source file with small functions less than 5 lines", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
@@ -678,7 +683,9 @@ func Process() error {
 	x := 1
 	y := 2
 	z := x + y
-	_ = z
+	w := z * 2
+	v := w + 1
+	_ = v
 	return nil
 }
 `

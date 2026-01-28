@@ -72,7 +72,7 @@ func checkTestFileNaming() error {
 					fmt.Sprintf("  - %s: file imports 'testing' but is not named '{origin}_test.go' or '{origin}_e2e_test.go'", path))
 			}
 
-			if hasSignificantFunctions(path) {
+			if !hasSkipDirective(path) && hasSignificantFunctions(path) {
 				fileViolations := validateSourceFile(path)
 				violations = append(violations, fileViolations...)
 			}
@@ -231,7 +231,7 @@ func hasFunctions(filePath string) bool {
 	return false
 }
 
-const minFunctionLines = 3
+const minFunctionLines = 5
 
 func hasSignificantFunctions(filePath string) bool {
 	fset := token.NewFileSet()
@@ -249,7 +249,7 @@ func hasSignificantFunctions(filePath string) bool {
 
 			startLine := fset.Position(fn.Body.Lbrace).Line
 			endLine := fset.Position(fn.Body.Rbrace).Line
-			lines := endLine - startLine + 1
+			lines := endLine - startLine - 1
 
 			if lines > minFunctionLines {
 				return true
