@@ -24,6 +24,8 @@ func createTestsCommand() *cobra.Command {
 				return err
 			}
 
+			log.Println("All tests completed successfully")
+
 			return nil
 		},
 	}
@@ -55,8 +57,6 @@ func runGoTests() error {
 			return err
 		}
 	}
-
-	log.Println("All tests completed successfully")
 
 	return nil
 }
