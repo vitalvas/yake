@@ -232,6 +232,7 @@ func hasFunctions(filePath string) bool {
 }
 
 const minFunctionLines = 5
+const maxUncoveredFunctionLines = 25
 
 func hasSignificantFunctions(filePath string) bool {
 	fset := token.NewFileSet()
@@ -260,10 +261,215 @@ func hasSignificantFunctions(filePath string) bool {
 	return false
 }
 
+type funcInfo struct {
+	Name      string
+	Lines     int
+	StartLine int
+	EndLine   int
+}
+
+type coverBlock struct {
+	StartLine int
+	EndLine   int
+	Count     int
+}
+
+func largeFunctions(filePath string) []funcInfo {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, 0)
+	if err != nil {
+		return nil
+	}
+
+	var result []funcInfo
+
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+
+		startLine := fset.Position(fn.Body.Lbrace).Line
+		endLine := fset.Position(fn.Body.Rbrace).Line
+		lines := endLine - startLine - 1
+
+		if lines <= maxUncoveredFunctionLines {
+			continue
+		}
+
+		name := fn.Name.Name
+
+		if fn.Recv != nil && len(fn.Recv.List) > 0 {
+			recv := fn.Recv.List[0].Type
+			if star, ok := recv.(*ast.StarExpr); ok {
+				recv = star.X
+			}
+
+			if ident, ok := recv.(*ast.Ident); ok {
+				name = ident.Name + "_" + fn.Name.Name
+			}
+		}
+
+		result = append(result, funcInfo{
+			Name:      name,
+			Lines:     lines,
+			StartLine: startLine,
+			EndLine:   endLine,
+		})
+	}
+
+	return result
+}
+
+func parseModulePath(goModContent string) string {
+	scanner := bufio.NewScanner(strings.NewReader(goModContent))
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module"))
+		}
+	}
+
+	return ""
+}
+
+func parseCoverProfile(data, modulePath string) map[string][]coverBlock {
+	result := make(map[string][]coverBlock)
+	lineRegex := regexp.MustCompile(`^(.+):(\d+)\.\d+,(\d+)\.\d+\s+\d+\s+(\d+)$`)
+
+	scanner := bufio.NewScanner(strings.NewReader(data))
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "mode:") {
+			continue
+		}
+
+		matches := lineRegex.FindStringSubmatch(line)
+		if len(matches) != 5 {
+			continue
+		}
+
+		filePath := matches[1]
+
+		if modulePath != "" && strings.HasPrefix(filePath, modulePath+"/") {
+			filePath = strings.TrimPrefix(filePath, modulePath+"/")
+		}
+
+		startLine, err := strconv.Atoi(matches[2])
+		if err != nil {
+			continue
+		}
+
+		endLine, err := strconv.Atoi(matches[3])
+		if err != nil {
+			continue
+		}
+
+		count, err := strconv.Atoi(matches[4])
+		if err != nil {
+			continue
+		}
+
+		result[filePath] = append(result[filePath], coverBlock{
+			StartLine: startLine,
+			EndLine:   endLine,
+			Count:     count,
+		})
+	}
+
+	return result
+}
+
+func isFuncCovered(blocks []coverBlock, fn funcInfo) bool {
+	for _, b := range blocks {
+		if b.Count > 0 && b.StartLine >= fn.StartLine && b.StartLine <= fn.EndLine {
+			return true
+		}
+	}
+
+	return false
+}
+
+func findUncoveredLargeFunctions(profilePath string) ([]string, error) {
+	goModData, err := os.ReadFile("go.mod")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read go.mod: %w", err)
+	}
+
+	modulePath := parseModulePath(string(goModData))
+
+	profileData, err := os.ReadFile(profilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read coverage profile: %w", err)
+	}
+
+	coverageMap := parseCoverProfile(string(profileData), modulePath)
+
+	var violations []string
+
+	err = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		if hasSkipDirective(path) {
+			return nil
+		}
+
+		funcs := largeFunctions(path)
+		if len(funcs) == 0 {
+			return nil
+		}
+
+		blocks := coverageMap[path]
+
+		for _, fn := range funcs {
+			if !isFuncCovered(blocks, fn) {
+				violations = append(violations,
+					fmt.Sprintf("  - %s: function '%s' (%d lines) has no test coverage", path, fn.Name, fn.Lines))
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	return violations, nil
+}
+
 func checkCoverage() error {
 	log.Println("Checking code coverage (minimum 80% per package)...")
 
-	cmd := exec.Command("go", "test", "-cover", "./...")
+	tmpFile, err := os.CreateTemp("", "coverage-*.out")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	tmpFile.Close()
+
+	defer os.Remove(tmpFile.Name())
+
+	cmd := exec.Command("go", "test", "-coverprofile="+tmpFile.Name(), "./...")
 
 	var stdout bytes.Buffer
 
@@ -278,6 +484,13 @@ func checkCoverage() error {
 	if err != nil {
 		return err
 	}
+
+	funcViolations, err := findUncoveredLargeFunctions(tmpFile.Name())
+	if err != nil {
+		return err
+	}
+
+	violations = append(violations, funcViolations...)
 
 	if len(violations) > 0 {
 		return fmt.Errorf("coverage violations (minimum %.0f%%):\n%s",

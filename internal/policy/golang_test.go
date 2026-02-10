@@ -1,8 +1,10 @@
 package policy
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -392,6 +394,282 @@ type User struct {
 	})
 }
 
+func generateLargeFunc(name string, lines int) string {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("func %s() {\n", name))
+
+	for i := range lines {
+		b.WriteString(fmt.Sprintf("\t_ = %d\n", i))
+	}
+
+	b.WriteString("}\n")
+
+	return b.String()
+}
+
+func generateLargeMethod(typeName, methodName string, lines int) string {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("func (t *%s) %s() {\n", typeName, methodName))
+
+	for i := range lines {
+		b.WriteString(fmt.Sprintf("\t_ = %d\n", i))
+	}
+
+	b.WriteString("}\n")
+
+	return b.String()
+}
+
+func Test_largeFunctions(t *testing.T) {
+	t.Run("returns funcInfo for function with more than 25 lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := "package main\n\n" + generateLargeFunc("ProcessData", 30)
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		result := largeFunctions(filePath)
+		require.Len(t, result, 1)
+		assert.Equal(t, "ProcessData", result[0].Name)
+		assert.Equal(t, 30, result[0].Lines)
+		assert.Greater(t, result[0].StartLine, 0)
+		assert.Greater(t, result[0].EndLine, result[0].StartLine)
+	})
+
+	t.Run("returns empty for function with 25 or fewer lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := "package main\n\n" + generateLargeFunc("SmallFunc", 25)
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		result := largeFunctions(filePath)
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns Type_Method format for methods", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := "package main\n\ntype Service struct{}\n\n" + generateLargeMethod("Service", "Handle", 30)
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		result := largeFunctions(filePath)
+		require.Len(t, result, 1)
+		assert.Equal(t, "Service_Handle", result[0].Name)
+		assert.Equal(t, 30, result[0].Lines)
+	})
+
+	t.Run("returns multiple large functions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := "package main\n\n" + generateLargeFunc("FuncA", 30) + "\n" + generateLargeFunc("FuncB", 30)
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		result := largeFunctions(filePath)
+		require.Len(t, result, 2)
+		assert.Equal(t, "FuncA", result[0].Name)
+		assert.Equal(t, "FuncB", result[1].Name)
+	})
+
+	t.Run("returns nil for non-existent file", func(t *testing.T) {
+		result := largeFunctions("/non/existent/file.go")
+		assert.Nil(t, result)
+	})
+}
+
+func Test_parseCoverProfile(t *testing.T) {
+	t.Run("parses valid profile with module prefix stripped", func(t *testing.T) {
+		profile := `mode: set
+github.com/example/app/internal/service/handler.go:10.30,20.2 5 1
+github.com/example/app/internal/service/handler.go:22.40,35.2 7 0
+github.com/example/app/main.go:5.15,10.2 3 1
+`
+		result := parseCoverProfile(profile, "github.com/example/app")
+
+		require.Len(t, result, 2)
+		require.Len(t, result["internal/service/handler.go"], 2)
+		assert.Equal(t, 10, result["internal/service/handler.go"][0].StartLine)
+		assert.Equal(t, 20, result["internal/service/handler.go"][0].EndLine)
+		assert.Equal(t, 1, result["internal/service/handler.go"][0].Count)
+		assert.Equal(t, 0, result["internal/service/handler.go"][1].Count)
+		require.Len(t, result["main.go"], 1)
+		assert.Equal(t, 1, result["main.go"][0].Count)
+	})
+
+	t.Run("returns empty map for empty profile", func(t *testing.T) {
+		result := parseCoverProfile("", "github.com/example/app")
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns empty map for mode-only profile", func(t *testing.T) {
+		result := parseCoverProfile("mode: set\n", "github.com/example/app")
+		assert.Empty(t, result)
+	})
+
+	t.Run("handles empty module path", func(t *testing.T) {
+		profile := `mode: set
+mypackage/handler.go:10.30,20.2 5 1
+`
+		result := parseCoverProfile(profile, "")
+
+		require.Len(t, result, 1)
+		require.Len(t, result["mypackage/handler.go"], 1)
+	})
+}
+
+func Test_parseModulePath(t *testing.T) {
+	t.Run("extracts module path from go.mod", func(t *testing.T) {
+		goMod := `module github.com/example/app
+
+go 1.21
+
+require (
+	github.com/stretchr/testify v1.9.0
+)
+`
+		assert.Equal(t, "github.com/example/app", parseModulePath(goMod))
+	})
+
+	t.Run("returns empty string for empty content", func(t *testing.T) {
+		assert.Equal(t, "", parseModulePath(""))
+	})
+
+	t.Run("returns empty string when no module line", func(t *testing.T) {
+		assert.Equal(t, "", parseModulePath("go 1.21\n"))
+	})
+}
+
+func Test_isFuncCovered(t *testing.T) {
+	t.Run("returns true when block with count > 0 is in range", func(t *testing.T) {
+		blocks := []coverBlock{
+			{StartLine: 12, EndLine: 20, Count: 1},
+		}
+		fn := funcInfo{Name: "Process", Lines: 30, StartLine: 10, EndLine: 42}
+		assert.True(t, isFuncCovered(blocks, fn))
+	})
+
+	t.Run("returns false when all blocks have count 0", func(t *testing.T) {
+		blocks := []coverBlock{
+			{StartLine: 12, EndLine: 20, Count: 0},
+			{StartLine: 22, EndLine: 30, Count: 0},
+		}
+		fn := funcInfo{Name: "Process", Lines: 30, StartLine: 10, EndLine: 42}
+		assert.False(t, isFuncCovered(blocks, fn))
+	})
+
+	t.Run("returns false when no blocks exist", func(t *testing.T) {
+		fn := funcInfo{Name: "Process", Lines: 30, StartLine: 10, EndLine: 42}
+		assert.False(t, isFuncCovered(nil, fn))
+	})
+
+	t.Run("returns false when block is outside function range", func(t *testing.T) {
+		blocks := []coverBlock{
+			{StartLine: 50, EndLine: 60, Count: 1},
+		}
+		fn := funcInfo{Name: "Process", Lines: 30, StartLine: 10, EndLine: 42}
+		assert.False(t, isFuncCovered(blocks, fn))
+	})
+}
+
+func Test_findUncoveredLargeFunctions(t *testing.T) {
+	t.Run("detects uncovered large function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		goMod := "module testproject\n\ngo 1.21\n"
+		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
+
+		code := "package main\n\n" + generateLargeFunc("BigProcess", 30)
+		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
+
+		// Coverage profile with no coverage for service.go
+		profile := "mode: set\ntestproject/other.go:1.10,5.2 3 1\n"
+		profilePath := filepath.Join(tmpDir, "cover.out")
+		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
+
+		violations, err := findUncoveredLargeFunctions(profilePath)
+		require.NoError(t, err)
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "BigProcess")
+		assert.Contains(t, violations[0], "no test coverage")
+	})
+
+	t.Run("passes when large function is covered", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		goMod := "module testproject\n\ngo 1.21\n"
+		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
+
+		code := "package main\n\n" + generateLargeFunc("BigProcess", 30)
+		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
+
+		// Coverage profile with coverage inside the function body
+		// Function starts at line 3 (func header), body starts at line 3, ends at line 34
+		profile := "mode: set\ntestproject/service.go:4.10,33.2 30 1\n"
+		profilePath := filepath.Join(tmpDir, "cover.out")
+		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
+
+		violations, err := findUncoveredLargeFunctions(profilePath)
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("skips files with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		goMod := "module testproject\n\ngo 1.21\n"
+		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
+
+		code := "//yake:skip-test\npackage main\n\n" + generateLargeFunc("BigProcess", 30)
+		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
+
+		profile := "mode: set\n"
+		profilePath := filepath.Join(tmpDir, "cover.out")
+		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
+
+		violations, err := findUncoveredLargeFunctions(profilePath)
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("skips test files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		goMod := "module testproject\n\ngo 1.21\n"
+		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
+
+		code := "package main\n\nimport \"testing\"\n\n" + generateLargeFunc("TestBig", 30)
+		require.NoError(t, os.WriteFile("service_test.go", []byte(code), 0644))
+
+		profile := "mode: set\n"
+		profilePath := filepath.Join(tmpDir, "cover.out")
+		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
+
+		violations, err := findUncoveredLargeFunctions(profilePath)
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+}
+
 func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("parses coverage above threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 85.0% of statements"
@@ -694,6 +972,7 @@ func Process() error {
 		err := checkTestFileNaming()
 		assert.NoError(t, err)
 	})
+
 }
 
 func TestRunGolangChecks(t *testing.T) {
@@ -751,6 +1030,21 @@ func Test_checkCoverage(t *testing.T) {
 		err := checkCoverage()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "coverage violations")
+	})
+
+	t.Run("detects large uncovered function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		createTestGoProjectWithLargeFunc(t, tmpDir)
+
+		err := checkCoverage()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no test coverage")
+		assert.Contains(t, err.Error(), "BigUntested")
 	})
 }
 
@@ -812,5 +1106,42 @@ func TestAdd(t *testing.T) {
 `
 	}
 
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main_test.go"), []byte(testGo), 0644))
+}
+
+func createTestGoProjectWithLargeFunc(t *testing.T, dir string) {
+	t.Helper()
+
+	goMod := `module testproject
+
+go 1.21
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644))
+
+	var b strings.Builder
+
+	b.WriteString("package main\n\n")
+	b.WriteString("func Add(a, b int) int { return a + b }\n\n")
+	b.WriteString("func BigUntested() int {\n")
+
+	for i := range 30 {
+		b.WriteString(fmt.Sprintf("\t_ = %d\n", i))
+	}
+
+	b.WriteString("\treturn 0\n}\n\nfunc main() {}\n")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(b.String()), 0644))
+
+	testGo := `package main
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	result := Add(2, 3)
+	if result != 5 {
+		t.Errorf("expected 5, got %d", result)
+	}
+}
+`
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "main_test.go"), []byte(testGo), 0644))
 }
