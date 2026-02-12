@@ -50,7 +50,7 @@ func checkTestFileNaming() error {
 
 		if info.IsDir() {
 			switch info.Name() {
-			case "vendor", ".git", "test", "tests":
+			case "vendor", ".git", "test", "tests", "examples":
 				return filepath.SkipDir
 			}
 
@@ -418,7 +418,7 @@ func findUncoveredLargeFunctions(profilePath string) ([]string, error) {
 
 		if info.IsDir() {
 			switch info.Name() {
-			case "vendor", ".git", "test", "tests":
+			case "vendor", ".git", "test", "tests", "examples":
 				return filepath.SkipDir
 			}
 
