@@ -57,7 +57,7 @@ func checkTestFileNaming() error {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ".go") {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") {
 			return nil
 		}
 
@@ -425,7 +425,7 @@ func findUncoveredLargeFunctions(profilePath string) ([]string, error) {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, ".pb.go") {
 			return nil
 		}
 
