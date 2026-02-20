@@ -135,6 +135,96 @@ func TestWorkflowMarshal(t *testing.T) {
 		assert.NotContains(t, content, "with:")
 	})
 
+	t.Run("renders workflow_dispatch as empty mapping", func(t *testing.T) {
+		w := Workflow{
+			Name: "test",
+			On: WorkflowOn{
+				WorkflowDispatch: &struct{}{},
+				Push:             &WorkflowTrigger{Branches: []string{"main"}},
+			},
+			Jobs: map[string]WorkflowJob{
+				"build": {
+					Name:   "Build",
+					RunsOn: "ubuntu-latest",
+					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				},
+			},
+		}
+
+		data, err := w.Marshal()
+		require.NoError(t, err)
+		assert.Contains(t, string(data), "workflow_dispatch: {}")
+	})
+
+	t.Run("includes trigger types and paths", func(t *testing.T) {
+		w := Workflow{
+			Name: "test",
+			On: WorkflowOn{
+				PullRequest: &WorkflowTrigger{
+					Types: []string{"opened", "synchronize"},
+					Paths: []string{"**.go", "go.mod"},
+				},
+			},
+			Jobs: map[string]WorkflowJob{
+				"build": {
+					RunsOn: "ubuntu-latest",
+					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				},
+			},
+		}
+
+		data, err := w.Marshal()
+		require.NoError(t, err)
+
+		content := string(data)
+		assert.Contains(t, content, "- opened")
+		assert.Contains(t, content, "- synchronize")
+		assert.Contains(t, content, "go.mod")
+	})
+
+	t.Run("includes step env", func(t *testing.T) {
+		w := Workflow{
+			Name: "test",
+			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
+			Jobs: map[string]WorkflowJob{
+				"test": {
+					RunsOn: "ubuntu-latest",
+					Steps: []WorkflowStep{
+						{
+							Name: "Upload",
+							Uses: "codecov/codecov-action@v5",
+							Env:  map[string]string{"TOKEN": "secret"},
+							With: map[string]string{"files": "coverage.txt"},
+						},
+					},
+				},
+			},
+		}
+
+		data, err := w.Marshal()
+		require.NoError(t, err)
+
+		content := string(data)
+		assert.Contains(t, content, "TOKEN: secret")
+	})
+
+	t.Run("omits job name when empty", func(t *testing.T) {
+		w := Workflow{
+			Name: "test",
+			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
+			Jobs: map[string]WorkflowJob{
+				"build": {
+					RunsOn: "ubuntu-latest",
+					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				},
+			},
+		}
+
+		data, err := w.Marshal()
+		require.NoError(t, err)
+		assert.NotContains(t, string(data), "name: \"\"")
+	})
+
 	t.Run("roundtrips through yaml", func(t *testing.T) {
 		original := Workflow{
 			Name: "ci",

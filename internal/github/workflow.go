@@ -30,12 +30,15 @@ func (w Workflow) Marshal() ([]byte, error) {
 }
 
 type WorkflowOn struct {
-	Push        *WorkflowTrigger `yaml:"push,omitempty"`
-	PullRequest *WorkflowTrigger `yaml:"pull_request,omitempty"`
+	WorkflowDispatch *struct{}        `yaml:"workflow_dispatch,omitempty"`
+	PullRequest      *WorkflowTrigger `yaml:"pull_request,omitempty"`
+	Push             *WorkflowTrigger `yaml:"push,omitempty"`
 }
 
 type WorkflowTrigger struct {
 	Branches []string `yaml:"branches,omitempty"`
+	Types    []string `yaml:"types,omitempty"`
+	Paths    []string `yaml:"paths,omitempty"`
 }
 
 type WorkflowPermissions struct {
@@ -45,7 +48,7 @@ type WorkflowPermissions struct {
 }
 
 type WorkflowJob struct {
-	Name    string            `yaml:"name"`
+	Name    string            `yaml:"name,omitempty"`
 	RunsOn  string            `yaml:"runs-on"`
 	Outputs map[string]string `yaml:"outputs,omitempty"`
 	Steps   []WorkflowStep    `yaml:"steps"`
@@ -56,5 +59,6 @@ type WorkflowStep struct {
 	Uses string            `yaml:"uses,omitempty"`
 	ID   string            `yaml:"id,omitempty"`
 	Run  string            `yaml:"run,omitempty"`
+	Env  map[string]string `yaml:"env,omitempty"`
 	With map[string]string `yaml:"with,omitempty"`
 }
