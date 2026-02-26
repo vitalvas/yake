@@ -18,10 +18,16 @@ import (
 
 const MinCoveragePercent = 80.0
 
+var packageNameRegex = regexp.MustCompile(`^[0-9a-z]{3,32}$`)
+
 func RunGolangChecks() error {
 	log.Println("Running Go policy checks...")
 
 	var allErrors []string
+
+	if err := checkPackageNaming(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
 
 	if err := checkTestFileNaming(); err != nil {
 		allErrors = append(allErrors, err.Error())
@@ -36,6 +42,71 @@ func RunGolangChecks() error {
 	}
 
 	return nil
+}
+
+func checkPackageNaming() error {
+	log.Println("Checking package naming conventions...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, ".pb.go") {
+			return nil
+		}
+
+		pkgName := extractPackageName(path)
+		if pkgName == "" || pkgName == "main" {
+			return nil
+		}
+
+		if !packageNameRegex.MatchString(pkgName) {
+			violations = append(violations,
+				fmt.Sprintf("  - %s: package name '%s' does not match '^[0-9a-z]{3,32}$'", path, pkgName))
+		}
+
+		dirName := filepath.Base(filepath.Dir(path))
+
+		if dirName != pkgName {
+			violations = append(violations,
+				fmt.Sprintf("  - %s: package name '%s' does not match directory name '%s'", path, pkgName, dirName))
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("package naming violations:\n%s", strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func extractPackageName(filePath string) string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.PackageClauseOnly)
+	if err != nil {
+		return ""
+	}
+
+	return node.Name.Name
 }
 
 func checkTestFileNaming() error {

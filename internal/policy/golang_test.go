@@ -975,6 +975,249 @@ func Process() error {
 
 }
 
+func Test_extractPackageName(t *testing.T) {
+	t.Run("extracts package name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+		require.NoError(t, os.WriteFile(filePath, []byte("package service\n"), 0644))
+
+		assert.Equal(t, "service", extractPackageName(filePath))
+	})
+
+	t.Run("returns empty for invalid go file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "bad.go")
+		require.NoError(t, os.WriteFile(filePath, []byte("not valid go {{{"), 0644))
+
+		assert.Equal(t, "", extractPackageName(filePath))
+	})
+
+	t.Run("returns empty for non-existent file", func(t *testing.T) {
+		assert.Equal(t, "", extractPackageName("/non/existent/file.go"))
+	})
+}
+
+func Test_checkPackageNaming(t *testing.T) {
+	t.Run("passes with valid package name matching directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/service", 0755))
+		require.NoError(t, os.WriteFile("internal/service/handler.go", []byte("package service\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("passes with numeric characters in package name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/api2", 0755))
+		require.NoError(t, os.WriteFile("internal/api2/handler.go", []byte("package api2\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("fails when package name too short", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/db", 0755))
+		require.NoError(t, os.WriteFile("internal/db/store.go", []byte("package db\n"), 0644))
+
+		err := checkPackageNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match")
+	})
+
+	t.Run("fails when package name contains uppercase", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/myService", 0755))
+		require.NoError(t, os.WriteFile("internal/myService/handler.go", []byte("package myService\n"), 0644))
+
+		err := checkPackageNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match")
+	})
+
+	t.Run("fails when package name contains underscore", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/my_service", 0755))
+		require.NoError(t, os.WriteFile("internal/my_service/handler.go", []byte("package my_service\n"), 0644))
+
+		err := checkPackageNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match")
+	})
+
+	t.Run("fails when package name contains hyphen", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/myservice", 0755))
+		// Go doesn't allow hyphens in package names, so this uses underscore in package but hyphen in dir
+		require.NoError(t, os.WriteFile("internal/myservice/handler.go", []byte("package my_service\n"), 0644))
+
+		err := checkPackageNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match")
+	})
+
+	t.Run("fails when package name too long", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		longName := "abcdefghijklmnopqrstuvwxyz1234567"
+		require.NoError(t, os.MkdirAll(filepath.Join("internal", longName), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join("internal", longName, "handler.go"), []byte("package "+longName+"\n"), 0644))
+
+		err := checkPackageNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match")
+	})
+
+	t.Run("fails when directory name does not match package name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/handler", 0755))
+		require.NoError(t, os.WriteFile("internal/handler/handler.go", []byte("package service\n"), 0644))
+
+		err := checkPackageNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match directory name 'handler'")
+	})
+
+	t.Run("skips main package", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips test files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/service", 0755))
+		require.NoError(t, os.WriteFile("internal/service/handler.go", []byte("package service\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/service/handler_test.go", []byte("package service_test\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips vendor directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("vendor/badpkg", 0755))
+		require.NoError(t, os.WriteFile("vendor/badpkg/file.go", []byte("package BADPKG\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips pb.go files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/proto", 0755))
+		require.NoError(t, os.WriteFile("internal/proto/message.pb.go", []byte("package proto\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("passes with 3 character package name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/api", 0755))
+		require.NoError(t, os.WriteFile("internal/api/handler.go", []byte("package api\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("passes with 32 character package name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		name32 := "abcdefghijklmnopqrstuvwxyz123456"
+		require.NoError(t, os.MkdirAll(filepath.Join("internal", name32), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join("internal", name32, "handler.go"), []byte("package "+name32+"\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips examples directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("examples/demo", 0755))
+		require.NoError(t, os.WriteFile("examples/demo/main.go", []byte("package AB\n"), 0644))
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+}
+
 func TestRunGolangChecks(t *testing.T) {
 	t.Run("passes with valid go project", func(t *testing.T) {
 		tmpDir := t.TempDir()
