@@ -47,9 +47,16 @@ func RunGolangChecks() error {
 func checkPackageNaming() error {
 	log.Println("Checking package naming conventions...")
 
+	absRoot, err := filepath.Abs(".")
+	if err != nil {
+		return fmt.Errorf("failed to resolve root directory: %w", err)
+	}
+
+	rootDirName := filepath.Base(absRoot)
+
 	var violations []string
 
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -78,6 +85,9 @@ func checkPackageNaming() error {
 		}
 
 		dirName := filepath.Base(filepath.Dir(path))
+		if dirName == "." {
+			dirName = rootDirName
+		}
 
 		if dirName != pkgName {
 			violations = append(violations,

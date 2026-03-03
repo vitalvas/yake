@@ -1203,6 +1203,37 @@ func Test_checkPackageNaming(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("passes when root package name matches directory name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		pkgDir := filepath.Join(tmpDir, "xqueue")
+		require.NoError(t, os.MkdirAll(pkgDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "chunk.go"), []byte("package xqueue\n"), 0644))
+
+		os.Chdir(pkgDir)
+
+		err := checkPackageNaming()
+		assert.NoError(t, err)
+	})
+
+	t.Run("fails when root package name does not match directory name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		pkgDir := filepath.Join(tmpDir, "wrongname")
+		require.NoError(t, os.MkdirAll(pkgDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "chunk.go"), []byte("package xqueue\n"), 0644))
+
+		os.Chdir(pkgDir)
+
+		err := checkPackageNaming()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match directory name 'wrongname'")
+	})
+
 	t.Run("skips examples directory", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
