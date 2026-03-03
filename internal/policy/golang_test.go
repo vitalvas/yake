@@ -397,10 +397,10 @@ type User struct {
 func generateLargeFunc(name string, lines int) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("func %s() {\n", name))
+	fmt.Fprintf(&b, "func %s() {\n", name)
 
 	for i := range lines {
-		b.WriteString(fmt.Sprintf("\t_ = %d\n", i))
+		fmt.Fprintf(&b, "\t_ = %d\n", i)
 	}
 
 	b.WriteString("}\n")
@@ -411,10 +411,10 @@ func generateLargeFunc(name string, lines int) string {
 func generateLargeMethod(typeName, methodName string, lines int) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("func (t *%s) %s() {\n", typeName, methodName))
+	fmt.Fprintf(&b, "func (t *%s) %s() {\n", typeName, methodName)
 
 	for i := range lines {
-		b.WriteString(fmt.Sprintf("\t_ = %d\n", i))
+		fmt.Fprintf(&b, "\t_ = %d\n", i)
 	}
 
 	b.WriteString("}\n")
@@ -1399,7 +1399,7 @@ go 1.21
 	b.WriteString("func BigUntested() int {\n")
 
 	for i := range 30 {
-		b.WriteString(fmt.Sprintf("\t_ = %d\n", i))
+		fmt.Fprintf(&b, "\t_ = %d\n", i)
 	}
 
 	b.WriteString("\treturn 0\n}\n\nfunc main() {}\n")
