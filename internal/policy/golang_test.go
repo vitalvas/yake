@@ -2,6 +2,9 @@ package policy
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -333,8 +336,81 @@ func main() {}
 		assert.False(t, hasSkipDirective(filePath))
 	})
 
+	t.Run("returns false when directive has space after slashes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "main.go")
+
+		code := `// yake:skip-test
+package main
+
+func main() {}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.False(t, hasSkipDirective(filePath))
+	})
+
 	t.Run("returns false for non-existent file", func(t *testing.T) {
 		assert.False(t, hasSkipDirective("/non/existent/file.go"))
+	})
+}
+
+func Test_hasFuncSkipDirective(t *testing.T) {
+	parseFunc := func(t *testing.T, code string) *ast.FuncDecl {
+		t.Helper()
+
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", code, parser.ParseComments)
+		require.NoError(t, err)
+
+		for _, decl := range node.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				return fn
+			}
+		}
+
+		t.Fatal("no function found in code")
+
+		return nil
+	}
+
+	t.Run("returns true when skip directive present", func(t *testing.T) {
+		code := `package main
+
+//yake:skip-test
+func Foo() {}
+`
+		fn := parseFunc(t, code)
+		assert.True(t, hasFuncSkipDirective(fn))
+	})
+
+	t.Run("returns false when no skip directive", func(t *testing.T) {
+		code := `package main
+
+// Regular comment
+func Foo() {}
+`
+		fn := parseFunc(t, code)
+		assert.False(t, hasFuncSkipDirective(fn))
+	})
+
+	t.Run("returns false when Doc is nil", func(t *testing.T) {
+		code := `package main
+
+func Foo() {}
+`
+		fn := parseFunc(t, code)
+		assert.False(t, hasFuncSkipDirective(fn))
+	})
+
+	t.Run("returns false when directive has space after slashes", func(t *testing.T) {
+		code := `package main
+
+// yake:skip-test
+func Foo() {}
+`
+		fn := parseFunc(t, code)
+		assert.False(t, hasFuncSkipDirective(fn))
 	})
 }
 
@@ -382,6 +458,27 @@ func main() {
 
 type User struct {
 	ID int
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.False(t, hasSignificantFunctions(filePath))
+	})
+
+	t.Run("returns false when significant function has skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := `package main
+
+//yake:skip-test
+func Process() error {
+	x := 1
+	y := 2
+	z := x + y
+	w := z * 2
+	v := w + 1
+	return nil
 }
 `
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
@@ -473,6 +570,18 @@ func Test_largeFunctions(t *testing.T) {
 		require.Len(t, result, 2)
 		assert.Equal(t, "FuncA", result[0].Name)
 		assert.Equal(t, "FuncB", result[1].Name)
+	})
+
+	t.Run("skips functions with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := "package main\n\n//yake:skip-test\n" + generateLargeFunc("SkippedFunc", 30) + "\n" + generateLargeFunc("IncludedFunc", 30)
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		result := largeFunctions(filePath)
+		require.Len(t, result, 1)
+		assert.Equal(t, "IncludedFunc", result[0].Name)
 	})
 
 	t.Run("returns nil for non-existent file", func(t *testing.T) {
@@ -636,6 +745,28 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
 
 		code := "//yake:skip-test\npackage main\n\n" + generateLargeFunc("BigProcess", 30)
+		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
+
+		profile := "mode: set\n"
+		profilePath := filepath.Join(tmpDir, "cover.out")
+		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
+
+		violations, err := findUncoveredLargeFunctions(profilePath)
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("skips function with function-level skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		goMod := "module testproject\n\ngo 1.21\n"
+		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
+
+		code := "package main\n\n//yake:skip-test\n" + generateLargeFunc("SkippedBigFunc", 30)
 		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
 
 		profile := "mode: set\n"

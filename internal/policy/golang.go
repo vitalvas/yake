@@ -277,6 +277,20 @@ func hasSkipDirective(filePath string) bool {
 	return false
 }
 
+func hasFuncSkipDirective(fn *ast.FuncDecl) bool {
+	if fn.Doc == nil {
+		return false
+	}
+
+	for _, comment := range fn.Doc.List {
+		if strings.HasPrefix(strings.TrimSpace(comment.Text), skipDirective) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func hasTestingImport(filePath string) bool {
 	fset := token.NewFileSet()
 
@@ -318,14 +332,14 @@ const maxUncoveredFunctionLines = 25
 func hasSignificantFunctions(filePath string) bool {
 	fset := token.NewFileSet()
 
-	node, err := parser.ParseFile(fset, filePath, nil, 0)
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return false
 	}
 
 	for _, decl := range node.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok {
-			if fn.Body == nil {
+			if fn.Body == nil || hasFuncSkipDirective(fn) {
 				continue
 			}
 
@@ -358,7 +372,7 @@ type coverBlock struct {
 func largeFunctions(filePath string) []funcInfo {
 	fset := token.NewFileSet()
 
-	node, err := parser.ParseFile(fset, filePath, nil, 0)
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return nil
 	}
@@ -367,7 +381,7 @@ func largeFunctions(filePath string) []funcInfo {
 
 	for _, decl := range node.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+		if !ok || fn.Body == nil || hasFuncSkipDirective(fn) {
 			continue
 		}
 
