@@ -16,7 +16,12 @@ import (
 	"strings"
 )
 
-const MinCoveragePercent = 80.0
+const (
+	MinCoveragePercent        = 80.0
+	minFunctionLines          = 5
+	maxUncoveredFunctionLines = 25
+	skipDirective             = "//yake:skip-test"
+)
 
 var packageNameRegex = regexp.MustCompile(`^[0-9a-z]{3,32}$`)
 
@@ -75,7 +80,71 @@ func checkEntryPoints() error {
 		return fmt.Errorf("entry point violation: found both root main.go and cmd/ entry points; use one layout:\n  - root main.go (single binary)\n  - cmd/*/main.go (multiple binaries)")
 	}
 
+	var mainFiles []string
+
+	if hasRootMain {
+		mainFiles = append(mainFiles, "main.go")
+	}
+
+	mainFiles = append(mainFiles, cmdMains...)
+
+	violations := validateMainFiles(mainFiles)
+	if len(violations) > 0 {
+		return fmt.Errorf("entry point violations:\n%s", strings.Join(violations, "\n"))
+	}
+
 	return nil
+}
+
+func validateMainFiles(paths []string) []string {
+	var violations []string
+
+	for _, path := range paths {
+		fset := token.NewFileSet()
+
+		node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			continue
+		}
+
+		hasMain := false
+
+		for _, decl := range node.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+
+			if fn.Name.Name == "main" && fn.Recv == nil {
+				hasMain = true
+
+				if fn.Body != nil {
+					startLine := fset.Position(fn.Body.Lbrace).Line
+					endLine := fset.Position(fn.Body.Rbrace).Line
+					lines := endLine - startLine - 1
+
+					if lines > maxUncoveredFunctionLines {
+						violations = append(violations,
+							fmt.Sprintf("  - %s: main() is %d lines (maximum %d); move logic to internal/ or pkg/",
+								path, lines, maxUncoveredFunctionLines))
+					}
+				}
+
+				continue
+			}
+
+			violations = append(violations,
+				fmt.Sprintf("  - %s: unexpected function '%s'; only main() is allowed in entry point files",
+					path, fn.Name.Name))
+		}
+
+		if !hasMain {
+			violations = append(violations,
+				fmt.Sprintf("  - %s: missing main() function", path))
+		}
+	}
+
+	return violations
 }
 
 func checkPackageNaming() error {
@@ -277,8 +346,6 @@ func validateSourceFile(sourcePath string) []string {
 	return violations
 }
 
-const skipDirective = "//yake:skip-test"
-
 func hasSkipDirective(filePath string) bool {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -359,9 +426,6 @@ func hasFunctions(filePath string) bool {
 
 	return false
 }
-
-const minFunctionLines = 5
-const maxUncoveredFunctionLines = 25
 
 func hasSignificantFunctions(filePath string) bool {
 	fset := token.NewFileSet()

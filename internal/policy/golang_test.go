@@ -126,6 +126,181 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "entry point violation")
 	})
+
+	t.Run("rejects extra functions in main.go", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := "package main\n\nfunc main() {}\n\nfunc helper() {}\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(content), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected function 'helper'")
+	})
+
+	t.Run("rejects init function in main.go", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := "package main\n\nfunc init() {}\n\nfunc main() {}\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(content), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected function 'init'")
+	})
+
+	t.Run("rejects oversized main function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		lines := make([]string, 0, 32)
+		lines = append(lines, "package main\n\nfunc main() {")
+		for i := range 30 {
+			lines = append(lines, fmt.Sprintf("\t_ = %d", i))
+		}
+		lines = append(lines, "}\n")
+
+		require.NoError(t, os.WriteFile("main.go", []byte(strings.Join(lines, "\n")), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "main() is 30 lines")
+	})
+
+	t.Run("rejects extra functions in cmd main.go", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("cmd/app1", 0755))
+		content := "package main\n\nfunc main() {}\n\nfunc run() {}\n"
+		require.NoError(t, os.WriteFile("cmd/app1/main.go", []byte(content), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected function 'run'")
+		assert.Contains(t, err.Error(), "cmd/app1/main.go")
+	})
+}
+
+func Test_validateMainFiles(t *testing.T) {
+	t.Run("valid minimal main", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+		require.NoError(t, os.WriteFile(path, []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		violations := validateMainFiles([]string{path})
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("rejects helper function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+		content := "package main\n\nfunc main() {}\n\nfunc setup() {}\n"
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := validateMainFiles([]string{path})
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "unexpected function 'setup'")
+	})
+
+	t.Run("rejects init function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+		content := "package main\n\nfunc init() {}\n\nfunc main() {}\n"
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := validateMainFiles([]string{path})
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "unexpected function 'init'")
+	})
+
+	t.Run("rejects main exceeding max lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+
+		lines := make([]string, 0, 32)
+		lines = append(lines, "package main\n\nfunc main() {")
+		for i := range 30 {
+			lines = append(lines, fmt.Sprintf("\t_ = %d", i))
+		}
+		lines = append(lines, "}\n")
+
+		require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644))
+
+		violations := validateMainFiles([]string{path})
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "main() is 30 lines")
+		assert.Contains(t, violations[0], fmt.Sprintf("maximum %d", maxUncoveredFunctionLines))
+	})
+
+	t.Run("allows main within max lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+
+		lines := make([]string, 0, 22)
+		lines = append(lines, "package main\n\nfunc main() {")
+		for i := range 20 {
+			lines = append(lines, fmt.Sprintf("\t_ = %d", i))
+		}
+		lines = append(lines, "}\n")
+
+		require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644))
+
+		violations := validateMainFiles([]string{path})
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("reports multiple violations", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+		content := "package main\n\nfunc init() {}\n\nfunc main() {}\n\nfunc helper() {}\n"
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := validateMainFiles([]string{path})
+
+		assert.Len(t, violations, 2)
+	})
+
+	t.Run("reports missing main function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+		require.NoError(t, os.WriteFile(path, []byte("package main\n"), 0644))
+
+		violations := validateMainFiles([]string{path})
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "missing main()")
+	})
+
+	t.Run("empty paths returns no violations", func(t *testing.T) {
+		violations := validateMainFiles(nil)
+
+		assert.Empty(t, violations)
+	})
+
 }
 
 func Test_validateTestFileName(t *testing.T) {
@@ -1700,6 +1875,17 @@ go 1.21
 
 	mainGo := `package main
 
+import _ "testproject/internal/calc"
+
+func main() {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(mainGo), 0644))
+
+	calcDir := filepath.Join(dir, "internal", "calc")
+	require.NoError(t, os.MkdirAll(calcDir, 0755))
+
+	calcGo := `package calc
+
 func Add(a, b int) int {
 	return a + b
 }
@@ -1707,15 +1893,13 @@ func Add(a, b int) int {
 func Subtract(a, b int) int {
 	return a - b
 }
-
-func main() {}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(mainGo), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(calcDir, "calc.go"), []byte(calcGo), 0644))
 
 	var testGo string
 
 	if coveragePercent >= 80 {
-		testGo = `package main
+		testGo = `package calc
 
 import "testing"
 
@@ -1734,7 +1918,7 @@ func TestSubtract(t *testing.T) {
 }
 `
 	} else {
-		testGo = `package main
+		testGo = `package calc
 
 import "testing"
 
@@ -1747,7 +1931,7 @@ func TestAdd(t *testing.T) {
 `
 	}
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "main_test.go"), []byte(testGo), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(calcDir, "calc_test.go"), []byte(testGo), 0644))
 }
 
 func createTestGoProjectWithLargeFunc(t *testing.T, dir string) {
@@ -1759,9 +1943,20 @@ go 1.21
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0644))
 
+	mainGo := `package main
+
+import _ "testproject/internal/calc"
+
+func main() {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(mainGo), 0644))
+
+	calcDir := filepath.Join(dir, "internal", "calc")
+	require.NoError(t, os.MkdirAll(calcDir, 0755))
+
 	var b strings.Builder
 
-	b.WriteString("package main\n\n")
+	b.WriteString("package calc\n\n")
 	b.WriteString("func Add(a, b int) int { return a + b }\n\n")
 	b.WriteString("func BigUntested() int {\n")
 
@@ -1769,11 +1964,11 @@ go 1.21
 		fmt.Fprintf(&b, "\t_ = %d\n", i)
 	}
 
-	b.WriteString("\treturn 0\n}\n\nfunc main() {}\n")
+	b.WriteString("\treturn 0\n}\n")
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(b.String()), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(calcDir, "calc.go"), []byte(b.String()), 0644))
 
-	testGo := `package main
+	testGo := `package calc
 
 import "testing"
 
@@ -1784,5 +1979,5 @@ func TestAdd(t *testing.T) {
 	}
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "main_test.go"), []byte(testGo), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(calcDir, "calc_test.go"), []byte(testGo), 0644))
 }
