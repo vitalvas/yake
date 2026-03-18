@@ -805,7 +805,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("parses coverage above threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 85.0% of statements"
 
-		violations, err := parseCoverageOutput(output)
+		violations, err := parseCoverageOutput(output, "")
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -814,7 +814,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("detects coverage below threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 50.0% of statements"
 
-		violations, err := parseCoverageOutput(output)
+		violations, err := parseCoverageOutput(output, "")
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -825,7 +825,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("detects no test files", func(t *testing.T) {
 		output := "?\tgithub.com/example/nopkg\t[no test files]"
 
-		violations, err := parseCoverageOutput(output)
+		violations, err := parseCoverageOutput(output, "")
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -839,14 +839,14 @@ ok  	github.com/example/pkg2	0.003s	coverage: 75.0% of statements
 ?	github.com/example/pkg3	[no test files]
 ok  	github.com/example/pkg4	0.002s	coverage: 100.0% of statements`
 
-		violations, err := parseCoverageOutput(output)
+		violations, err := parseCoverageOutput(output, "")
 
 		require.NoError(t, err)
 		assert.Len(t, violations, 2)
 	})
 
 	t.Run("handles empty output", func(t *testing.T) {
-		violations, err := parseCoverageOutput("")
+		violations, err := parseCoverageOutput("", "")
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -855,11 +855,152 @@ ok  	github.com/example/pkg4	0.002s	coverage: 100.0% of statements`
 	t.Run("handles cached coverage output", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t(cached)\tcoverage: 75.0% of statements"
 
-		violations, err := parseCoverageOutput(output)
+		violations, err := parseCoverageOutput(output, "")
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "75.0%")
+	})
+
+	t.Run("skips no test files for embed-only package", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pkgDir := filepath.Join(tmpDir, "internal", "static")
+		require.NoError(t, os.MkdirAll(pkgDir, 0755))
+
+		embedFile := `package static
+
+import "embed"
+
+//go:embed policy-builder.html
+var FS embed.FS
+`
+		require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "embed.go"), []byte(embedFile), 0644))
+
+		modulePath := "github.com/example/myapp"
+		output := "?\tgithub.com/example/myapp/internal/static\t[no test files]"
+
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		violations, err := parseCoverageOutput(output, modulePath)
+
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("skips no test files for package with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pkgDir := filepath.Join(tmpDir, "internal", "skipped")
+		require.NoError(t, os.MkdirAll(pkgDir, 0755))
+
+		skippedFile := `//yake:skip-test
+package skipped
+
+func LargeFunction() string {
+	a := "hello"
+	b := "world"
+	c := a + b
+	d := c + "!"
+	e := d + "?"
+	f := e + "."
+	return f
+}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "skipped.go"), []byte(skippedFile), 0644))
+
+		modulePath := "github.com/example/myapp"
+		output := "?\tgithub.com/example/myapp/internal/skipped\t[no test files]"
+
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		violations, err := parseCoverageOutput(output, modulePath)
+
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+}
+
+func Test_packageToDir(t *testing.T) {
+	t.Run("strips module prefix", func(t *testing.T) {
+		dir := packageToDir("github.com/example/myapp/internal/static", "github.com/example/myapp")
+		assert.Equal(t, "internal/static", dir)
+	})
+
+	t.Run("returns dot for root package", func(t *testing.T) {
+		dir := packageToDir("github.com/example/myapp", "github.com/example/myapp")
+		assert.Equal(t, ".", dir)
+	})
+
+	t.Run("returns package name when no module match", func(t *testing.T) {
+		dir := packageToDir("github.com/other/pkg", "github.com/example/myapp")
+		assert.Equal(t, "github.com/other/pkg", dir)
+	})
+}
+
+func Test_packageNeedsTests(t *testing.T) {
+	t.Run("returns false for embed-only package", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		embedFile := `package static
+
+import "embed"
+
+//go:embed data.html
+var FS embed.FS
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "embed.go"), []byte(embedFile), 0644))
+
+		assert.False(t, packageNeedsTests(tmpDir))
+	})
+
+	t.Run("returns true for package with significant functions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		goFile := `package mypkg
+
+func BigFunction() string {
+	a := "hello"
+	b := "world"
+	c := a + b
+	d := c + "!"
+	e := d + "?"
+	f := e + "."
+	return f
+}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "mypkg.go"), []byte(goFile), 0644))
+
+		assert.True(t, packageNeedsTests(tmpDir))
+	})
+
+	t.Run("returns false for package with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		goFile := `//yake:skip-test
+package mypkg
+
+func BigFunction() string {
+	a := "hello"
+	b := "world"
+	c := a + b
+	d := c + "!"
+	e := d + "?"
+	f := e + "."
+	return f
+}
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "mypkg.go"), []byte(goFile), 0644))
+
+		assert.False(t, packageNeedsTests(tmpDir))
+	})
+
+	t.Run("returns true for non-existent directory", func(t *testing.T) {
+		assert.True(t, packageNeedsTests("/nonexistent/path"))
 	})
 }
 

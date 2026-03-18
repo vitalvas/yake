@@ -575,7 +575,14 @@ func checkCoverage() error {
 		return fmt.Errorf("failed to run coverage check: %w", err)
 	}
 
-	violations, err := parseCoverageOutput(stdout.String())
+	goModData, err := os.ReadFile("go.mod")
+	if err != nil {
+		return fmt.Errorf("failed to read go.mod: %w", err)
+	}
+
+	modulePath := parseModulePath(string(goModData))
+
+	violations, err := parseCoverageOutput(stdout.String(), modulePath)
 	if err != nil {
 		return err
 	}
@@ -595,7 +602,7 @@ func checkCoverage() error {
 	return nil
 }
 
-func parseCoverageOutput(output string) ([]string, error) {
+func parseCoverageOutput(output, modulePath string) ([]string, error) {
 	var violations []string
 
 	coverageRegex := regexp.MustCompile(`ok\s+(\S+)\s+(?:[\d.]+s|\(cached\))\s+coverage:\s+([\d.]+)%`)
@@ -621,10 +628,52 @@ func parseCoverageOutput(output string) ([]string, error) {
 		}
 
 		if matches := noCoverageRegex.FindStringSubmatch(line); len(matches) == 2 {
-			violations = append(violations,
-				fmt.Sprintf("  - %s: no test files", matches[1]))
+			pkgName := matches[1]
+
+			dir := packageToDir(pkgName, modulePath)
+			if packageNeedsTests(dir) {
+				violations = append(violations,
+					fmt.Sprintf("  - %s: no test files", pkgName))
+			}
 		}
 	}
 
 	return violations, scanner.Err()
+}
+
+func packageToDir(pkgName, modulePath string) string {
+	if modulePath != "" && strings.HasPrefix(pkgName, modulePath+"/") {
+		return strings.TrimPrefix(pkgName, modulePath+"/")
+	}
+
+	if pkgName == modulePath {
+		return "."
+	}
+
+	return pkgName
+}
+
+func packageNeedsTests(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return true
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, ".pb.go") {
+			continue
+		}
+
+		path := filepath.Join(dir, name)
+		if !hasSkipDirective(path) && hasSignificantFunctions(path) {
+			return true
+		}
+	}
+
+	return false
 }
