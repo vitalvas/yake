@@ -25,6 +25,10 @@ func RunGolangChecks() error {
 
 	var allErrors []string
 
+	if err := checkEntryPoints(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
 	if err := checkPackageNaming(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
@@ -39,6 +43,36 @@ func RunGolangChecks() error {
 
 	if len(allErrors) > 0 {
 		return fmt.Errorf("%s", strings.Join(allErrors, "\n"))
+	}
+
+	return nil
+}
+
+func checkEntryPoints() error {
+	log.Println("Checking entry point layout (root main.go vs cmd/**/main.go)...")
+
+	hasRootMain := false
+
+	if _, err := os.Stat("main.go"); err == nil {
+		hasRootMain = true
+	}
+
+	var cmdMains []string
+
+	_ = filepath.Walk("cmd", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() && info.Name() == "main.go" {
+			cmdMains = append(cmdMains, path)
+		}
+
+		return nil
+	})
+
+	if hasRootMain && len(cmdMains) > 0 {
+		return fmt.Errorf("entry point violation: found both root main.go and cmd/ entry points; use one layout:\n  - root main.go (single binary)\n  - cmd/*/main.go (multiple binaries)")
 	}
 
 	return nil

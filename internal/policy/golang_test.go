@@ -33,6 +33,101 @@ import "testing"
 var _ = testing.T{}
 `
 
+func Test_checkEntryPoints(t *testing.T) {
+	t.Run("allows root main.go only", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		err := checkEntryPoints()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows cmd entry points only", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("cmd/app1", 0755))
+		require.NoError(t, os.WriteFile("cmd/app1/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		err := checkEntryPoints()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows nested cmd entry points", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("cmd/tools/migrate", 0755))
+		require.NoError(t, os.WriteFile("cmd/tools/migrate/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		err := checkEntryPoints()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows no main files (library)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/pkg", 0755))
+		require.NoError(t, os.WriteFile("internal/pkg/lib.go", []byte("package pkg\n"), 0644))
+
+		err := checkEntryPoints()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("rejects both root and cmd entry points", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.MkdirAll("cmd/app1", 0755))
+		require.NoError(t, os.WriteFile("cmd/app1/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "entry point violation")
+	})
+
+	t.Run("rejects root and nested cmd entry points", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.MkdirAll("cmd/tools/migrate", 0755))
+		require.NoError(t, os.WriteFile("cmd/tools/migrate/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "entry point violation")
+	})
+}
+
 func Test_validateTestFileName(t *testing.T) {
 	t.Run("valid test file with source", func(t *testing.T) {
 		tmpDir := t.TempDir()
