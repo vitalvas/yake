@@ -303,6 +303,402 @@ func Test_validateMainFiles(t *testing.T) {
 
 }
 
+func Test_checkStdlibWrappers(t *testing.T) {
+	t.Run("passes with no wrappers", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+import "os"
+
+func createFile(name string) error {
+	f, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStdlibWrappers()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects stdlib wrapper", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+import "os"
+
+func removeFile(name string) error {
+	return os.Remove(name)
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStdlibWrappers()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "wrapper around 'os.Remove'")
+	})
+
+	t.Run("detects golang.org/x wrapper", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+import "golang.org/x/text/transform"
+
+func resetTransformer(t transform.Transformer) {
+	return t.Reset()
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		// Will not detect since it's a method call on param, not a pkg.Func call
+		err := checkStdlibWrappers()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows third-party wrappers", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+import "github.com/some/pkg"
+
+func wrap(name string) error {
+	return pkg.DoSomething(name)
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStdlibWrappers()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips test files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+import "os"
+
+func removeFile(name string) error {
+	return os.Remove(name)
+}
+`
+		require.NoError(t, os.WriteFile("main_test.go", []byte(code), 0644))
+
+		err := checkStdlibWrappers()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows functions with extra logic", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func readFile(name string) ([]byte, error) {
+	fmt.Println("reading file")
+	return os.ReadFile(name)
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStdlibWrappers()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects wrapper with hardcoded extra args", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+import "os"
+
+func writeConfig(path string, data []byte) error {
+	return os.WriteFile(path, data, 0644)
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStdlibWrappers()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "wrapper around 'os.WriteFile'")
+	})
+}
+
+func Test_findStdlibWrappers(t *testing.T) {
+	t.Run("detects simple wrapper", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := `package main
+
+import "os"
+
+func remove(name string) error {
+	return os.Remove(name)
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStdlibWrappers(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "os.Remove")
+	})
+
+	t.Run("ignores methods", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := `package main
+
+import "os"
+
+type myType struct{}
+
+func (m *myType) remove(name string) error {
+	return os.Remove(name)
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStdlibWrappers(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("returns nil for non-existent file", func(t *testing.T) {
+		violations := findStdlibWrappers("/nonexistent/file.go")
+
+		assert.Nil(t, violations)
+	})
+
+	t.Run("ignores multi-statement functions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := `package main
+
+import (
+	"log"
+	"os"
+)
+
+func remove(name string) error {
+	log.Println(name)
+	return os.Remove(name)
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStdlibWrappers(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("skips function with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := `package main
+
+import "strings"
+
+// IsEncrypted checks if a value has the encrypted prefix.
+//
+//yake:skip-test
+func IsEncrypted(value string) bool {
+	return strings.HasPrefix(value, "ENC:")
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStdlibWrappers(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("skips file with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := `//yake:skip-test
+package main
+
+import "os"
+
+func remove(name string) error {
+	return os.Remove(name)
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStdlibWrappers(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("detects aliased stdlib import", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := `package main
+
+import myos "os"
+
+func remove(name string) error {
+	return myos.Remove(name)
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStdlibWrappers(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "myos.Remove")
+	})
+}
+
+func Test_isStdlibImport(t *testing.T) {
+	t.Run("standard library", func(t *testing.T) {
+		assert.True(t, isStdlibImport("fmt"))
+		assert.True(t, isStdlibImport("os"))
+		assert.True(t, isStdlibImport("net/http"))
+		assert.True(t, isStdlibImport("encoding/json"))
+	})
+
+	t.Run("golang.org/x packages", func(t *testing.T) {
+		assert.True(t, isStdlibImport("golang.org/x/text/transform"))
+		assert.True(t, isStdlibImport("golang.org/x/sync/errgroup"))
+	})
+
+	t.Run("third-party packages", func(t *testing.T) {
+		assert.False(t, isStdlibImport("github.com/some/pkg"))
+		assert.False(t, isStdlibImport("go.uber.org/zap"))
+	})
+}
+
+func Test_isParamForwarding(t *testing.T) {
+	t.Run("all params forwarded", func(t *testing.T) {
+		code := `package main
+
+import "os"
+
+func remove(name string) error {
+	return os.Remove(name)
+}
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", code, 0)
+		require.NoError(t, err)
+
+		fn := node.Decls[1].(*ast.FuncDecl)
+		retStmt := fn.Body.List[0].(*ast.ReturnStmt)
+		call := retStmt.Results[0].(*ast.CallExpr)
+
+		assert.True(t, isParamForwarding(fn, call))
+	})
+
+	t.Run("all params forwarded with extra args", func(t *testing.T) {
+		code := `package main
+
+import "os"
+
+func writeFile(path string, data []byte) error {
+	return os.WriteFile(path, data, 0644)
+}
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", code, 0)
+		require.NoError(t, err)
+
+		fn := node.Decls[1].(*ast.FuncDecl)
+		retStmt := fn.Body.List[0].(*ast.ReturnStmt)
+		call := retStmt.Results[0].(*ast.CallExpr)
+
+		assert.True(t, isParamForwarding(fn, call))
+	})
+
+	t.Run("no params forwarded", func(t *testing.T) {
+		code := `package main
+
+import "os"
+
+func removeTemp(name string) error {
+	return os.Remove("/tmp/file")
+}
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", code, 0)
+		require.NoError(t, err)
+
+		fn := node.Decls[1].(*ast.FuncDecl)
+		retStmt := fn.Body.List[0].(*ast.ReturnStmt)
+		call := retStmt.Results[0].(*ast.CallExpr)
+
+		assert.False(t, isParamForwarding(fn, call))
+	})
+
+	t.Run("no params no args", func(t *testing.T) {
+		code := `package main
+
+import "os"
+
+func hostname() (string, error) {
+	return os.Hostname()
+}
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", code, 0)
+		require.NoError(t, err)
+
+		fn := node.Decls[1].(*ast.FuncDecl)
+		retStmt := fn.Body.List[0].(*ast.ReturnStmt)
+		call := retStmt.Results[0].(*ast.CallExpr)
+
+		assert.True(t, isParamForwarding(fn, call))
+	})
+}
+
 func Test_checkStringConcat(t *testing.T) {
 	t.Run("passes with no string concatenation", func(t *testing.T) {
 		tmpDir := t.TempDir()

@@ -42,6 +42,10 @@ func RunGolangChecks() error {
 		allErrors = append(allErrors, err.Error())
 	}
 
+	if err := checkStdlibWrappers(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
 	if err := checkTestFileNaming(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
@@ -224,6 +228,195 @@ func isStringLit(expr ast.Expr) bool {
 	lit, ok := expr.(*ast.BasicLit)
 
 	return ok && lit.Kind == token.STRING
+}
+
+func checkStdlibWrappers() error {
+	log.Println("Checking for stdlib wrapper functions...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findStdlibWrappers(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("stdlib wrapper violations (do not wrap standard library functions):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findStdlibWrappers(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	stdlibAliases := buildStdlibAliases(node)
+	if len(stdlibAliases) == 0 {
+		return nil
+	}
+
+	var violations []string
+
+	if hasSkipDirective(filePath) {
+		return nil
+	}
+
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil || fn.Recv != nil {
+			continue
+		}
+
+		if hasFuncSkipDirective(fn) {
+			continue
+		}
+
+		if len(fn.Body.List) != 1 {
+			continue
+		}
+
+		retStmt, ok := fn.Body.List[0].(*ast.ReturnStmt)
+		if !ok || len(retStmt.Results) != 1 {
+			continue
+		}
+
+		callExpr, ok := retStmt.Results[0].(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+
+		pkgFunc := extractPkgFunc(callExpr)
+		if pkgFunc == "" {
+			continue
+		}
+
+		parts := strings.SplitN(pkgFunc, ".", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		if _, isStdlib := stdlibAliases[parts[0]]; !isStdlib {
+			continue
+		}
+
+		if !isParamForwarding(fn, callExpr) {
+			continue
+		}
+
+		pos := fset.Position(fn.Pos())
+		violations = append(violations,
+			fmt.Sprintf("  - %s:%d: function '%s' is a wrapper around '%s'",
+				filePath, pos.Line, fn.Name.Name, pkgFunc))
+	}
+
+	return violations
+}
+
+func buildStdlibAliases(node *ast.File) map[string]string {
+	aliases := make(map[string]string)
+
+	for _, imp := range node.Imports {
+		importPath := strings.Trim(imp.Path.Value, `"`)
+		if !isStdlibImport(importPath) {
+			continue
+		}
+
+		var alias string
+		if imp.Name != nil {
+			alias = imp.Name.Name
+		} else {
+			parts := strings.Split(importPath, "/")
+			alias = parts[len(parts)-1]
+		}
+
+		if alias != "_" && alias != "." {
+			aliases[alias] = importPath
+		}
+	}
+
+	return aliases
+}
+
+func isStdlibImport(importPath string) bool {
+	if !strings.Contains(importPath, ".") {
+		return true
+	}
+
+	return strings.HasPrefix(importPath, "golang.org/x/")
+}
+
+func extractPkgFunc(call *ast.CallExpr) string {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+
+	return fmt.Sprintf("%s.%s", ident.Name, sel.Sel.Name)
+}
+
+func isParamForwarding(fn *ast.FuncDecl, call *ast.CallExpr) bool {
+	if fn.Type.Params == nil || len(fn.Type.Params.List) == 0 {
+		return len(call.Args) == 0
+	}
+
+	paramNames := make(map[string]bool)
+	for _, field := range fn.Type.Params.List {
+		for _, name := range field.Names {
+			paramNames[name.Name] = true
+		}
+	}
+
+	if len(paramNames) == 0 {
+		return false
+	}
+
+	usedParams := 0
+	for _, arg := range call.Args {
+		ident, ok := arg.(*ast.Ident)
+		if !ok {
+			continue
+		}
+
+		if paramNames[ident.Name] {
+			usedParams++
+		}
+	}
+
+	return usedParams == len(paramNames)
 }
 
 func checkPackageNaming() error {
