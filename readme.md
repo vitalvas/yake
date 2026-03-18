@@ -26,11 +26,15 @@ Runs a comprehensive testing and quality pipeline:
 
 Enforces project-wide policies for Go projects:
 
+- **Entry point layout** -- root `main.go` and `cmd/**/main.go` must not coexist; entry point files may only contain `main()` (no `init()`, no helpers, max 25 lines)
 - **Package naming** -- package names must match `^[0-9a-z]{3,32}$` and match their directory name
 - **Test file naming** -- test files must follow `{origin}_test.go` or `{origin}_e2e_test.go` convention
-- **Code coverage** -- minimum 80% coverage per package; large functions (>25 lines) must have test coverage
+- **Code coverage** -- minimum 80% coverage per package; large functions (>25 lines) must have test coverage; packages without testable code (e.g., embed-only) are skipped
 
-Use `//yake:skip-test` directive before the `package` declaration to skip checks for a file.
+#### Skip directives
+
+- `//yake:skip-test` before the `package` declaration skips test requirements for the entire file
+- `//yake:skip-test` above a function declaration skips coverage requirements for that function
 
 ### `yake code`
 
