@@ -38,6 +38,10 @@ func RunGolangChecks() error {
 		allErrors = append(allErrors, err.Error())
 	}
 
+	if err := checkStringConcat(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
 	if err := checkTestFileNaming(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
@@ -145,6 +149,81 @@ func validateMainFiles(paths []string) []string {
 	}
 
 	return violations
+}
+
+func checkStringConcat() error {
+	log.Println("Checking for string concatenation with '+'...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") {
+			return nil
+		}
+
+		fileViolations := findStringConcatenations(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("string concatenation violations (use fmt.Sprintf or strings.Builder):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findStringConcatenations(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	var violations []string
+
+	ast.Inspect(node, func(n ast.Node) bool {
+		binExpr, ok := n.(*ast.BinaryExpr)
+		if !ok || binExpr.Op != token.ADD {
+			return true
+		}
+
+		if isStringLit(binExpr.X) || isStringLit(binExpr.Y) {
+			pos := fset.Position(binExpr.OpPos)
+			violations = append(violations,
+				fmt.Sprintf("  - %s:%d: string concatenation with '+'", filePath, pos.Line))
+		}
+
+		return true
+	})
+
+	return violations
+}
+
+func isStringLit(expr ast.Expr) bool {
+	lit, ok := expr.(*ast.BasicLit)
+
+	return ok && lit.Kind == token.STRING
 }
 
 func checkPackageNaming() error {
@@ -292,10 +371,10 @@ func validateTestFileName(testPath string) []string {
 
 	if isE2ETest {
 		baseName := strings.TrimSuffix(filename, "_e2e_test.go")
-		expectedSourceFile = baseName + ".go"
+		expectedSourceFile = fmt.Sprintf("%s.go", baseName)
 	} else {
 		baseName := strings.TrimSuffix(filename, "_test.go")
-		expectedSourceFile = baseName + ".go"
+		expectedSourceFile = fmt.Sprintf("%s.go", baseName)
 
 		invalidPatterns := []string{
 			"_unit_test.go",
@@ -335,7 +414,7 @@ func validateSourceFile(sourcePath string) []string {
 	dir := filepath.Dir(sourcePath)
 
 	baseName := strings.TrimSuffix(filename, ".go")
-	testFile := baseName + "_test.go"
+	testFile := fmt.Sprintf("%s_test.go", baseName)
 	testPath := filepath.Join(dir, testFile)
 
 	if _, err := os.Stat(testPath); os.IsNotExist(err) {
@@ -500,7 +579,7 @@ func largeFunctions(filePath string) []funcInfo {
 			}
 
 			if ident, ok := recv.(*ast.Ident); ok {
-				name = ident.Name + "_" + fn.Name.Name
+				name = fmt.Sprintf("%s_%s", ident.Name, fn.Name.Name)
 			}
 		}
 
@@ -548,8 +627,9 @@ func parseCoverProfile(data, modulePath string) map[string][]coverBlock {
 
 		filePath := matches[1]
 
-		if modulePath != "" && strings.HasPrefix(filePath, modulePath+"/") {
-			filePath = strings.TrimPrefix(filePath, modulePath+"/")
+		prefix := fmt.Sprintf("%s/", modulePath)
+		if modulePath != "" && strings.HasPrefix(filePath, prefix) {
+			filePath = strings.TrimPrefix(filePath, prefix)
 		}
 
 		startLine, err := strconv.Atoi(matches[2])
@@ -662,7 +742,7 @@ func checkCoverage() error {
 
 	defer os.Remove(tmpFile.Name())
 
-	cmd := exec.Command("go", "test", "-coverprofile="+tmpFile.Name(), "./...")
+	cmd := exec.Command("go", "test", fmt.Sprintf("-coverprofile=%s", tmpFile.Name()), "./...")
 
 	var stdout bytes.Buffer
 
@@ -740,8 +820,9 @@ func parseCoverageOutput(output, modulePath string) ([]string, error) {
 }
 
 func packageToDir(pkgName, modulePath string) string {
-	if modulePath != "" && strings.HasPrefix(pkgName, modulePath+"/") {
-		return strings.TrimPrefix(pkgName, modulePath+"/")
+	prefix := fmt.Sprintf("%s/", modulePath)
+	if modulePath != "" && strings.HasPrefix(pkgName, prefix) {
+		return strings.TrimPrefix(pkgName, prefix)
 	}
 
 	if pkgName == modulePath {

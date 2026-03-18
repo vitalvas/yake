@@ -303,6 +303,192 @@ func Test_validateMainFiles(t *testing.T) {
 
 }
 
+func Test_checkStringConcat(t *testing.T) {
+	t.Run("passes with no string concatenation", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nfunc main() {\n\tx := fmt.Sprintf(\"%s %s\", \"hello\", \"world\")\n\t_ = x\n}\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects string literal concatenation", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nvar x = \"hello\" + \" world\"\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "string concatenation with '+'")
+	})
+
+	t.Run("detects variable plus string literal", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nfunc main() {\n\tx := \"prefix\"\n\ty := x + \".go\"\n\t_ = y\n}\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "string concatenation with '+'")
+	})
+
+	t.Run("allows += operator", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nfunc main() {\n\tx := \"hello\"\n\tx += \" world\"\n\t_ = x\n}\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows integer addition", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nfunc main() {\n\tx := 1 + 2\n\t_ = x\n}\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("checks test files too", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nimport \"testing\"\n\nfunc TestFoo(t *testing.T) {\n\tx := \"a\" + \"b\"\n\t_ = x\n}\n"
+		require.NoError(t, os.WriteFile("main_test.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "string concatenation with '+'")
+	})
+
+	t.Run("skips vendor directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("vendor/lib", 0755))
+		code := "package lib\n\nvar x = \"a\" + \"b\"\n"
+		require.NoError(t, os.WriteFile("vendor/lib/lib.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips .pb.go files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nvar x = \"a\" + \"b\"\n"
+		require.NoError(t, os.WriteFile("msg.pb.go", []byte(code), 0644))
+
+		err := checkStringConcat()
+
+		assert.NoError(t, err)
+	})
+}
+
+func Test_findStringConcatenations(t *testing.T) {
+	t.Run("finds concatenation with string literal", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte("package main\n\nvar x = \"a\" + \"b\"\n"), 0644))
+
+		violations := findStringConcatenations(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "string concatenation with '+'")
+	})
+
+	t.Run("returns empty for integer addition", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte("package main\n\nvar x = 1 + 2\n"), 0644))
+
+		violations := findStringConcatenations(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("returns nil for non-existent file", func(t *testing.T) {
+		violations := findStringConcatenations("/nonexistent/file.go")
+
+		assert.Nil(t, violations)
+	})
+
+	t.Run("detects multiple concatenations", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := "package main\n\nvar x = \"a\" + \"b\"\nvar y = \"c\" + \"d\"\n"
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStringConcatenations(path)
+
+		assert.Len(t, violations, 2)
+	})
+}
+
+func Test_isStringLit(t *testing.T) {
+	t.Run("returns true for string literal", func(t *testing.T) {
+		lit := &ast.BasicLit{Kind: token.STRING, Value: `"hello"`}
+
+		assert.True(t, isStringLit(lit))
+	})
+
+	t.Run("returns false for int literal", func(t *testing.T) {
+		lit := &ast.BasicLit{Kind: token.INT, Value: "42"}
+
+		assert.False(t, isStringLit(lit))
+	})
+
+	t.Run("returns false for identifier", func(t *testing.T) {
+		ident := &ast.Ident{Name: "x"}
+
+		assert.False(t, isStringLit(ident))
+	})
+}
+
 func Test_validateTestFileName(t *testing.T) {
 	t.Run("valid test file with source", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -794,7 +980,7 @@ func Test_largeFunctions(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "service.go")
 
-		code := "package main\n\n" + generateLargeFunc("ProcessData", 30)
+		code := fmt.Sprintf("package main\n\n%s", generateLargeFunc("ProcessData", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
 		result := largeFunctions(filePath)
@@ -809,7 +995,7 @@ func Test_largeFunctions(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "service.go")
 
-		code := "package main\n\n" + generateLargeFunc("SmallFunc", 25)
+		code := fmt.Sprintf("package main\n\n%s", generateLargeFunc("SmallFunc", 25))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
 		result := largeFunctions(filePath)
@@ -820,7 +1006,7 @@ func Test_largeFunctions(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "service.go")
 
-		code := "package main\n\ntype Service struct{}\n\n" + generateLargeMethod("Service", "Handle", 30)
+		code := fmt.Sprintf("package main\n\ntype Service struct{}\n\n%s", generateLargeMethod("Service", "Handle", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
 		result := largeFunctions(filePath)
@@ -833,7 +1019,7 @@ func Test_largeFunctions(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "service.go")
 
-		code := "package main\n\n" + generateLargeFunc("FuncA", 30) + "\n" + generateLargeFunc("FuncB", 30)
+		code := fmt.Sprintf("package main\n\n%s\n%s", generateLargeFunc("FuncA", 30), generateLargeFunc("FuncB", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
 		result := largeFunctions(filePath)
@@ -846,7 +1032,7 @@ func Test_largeFunctions(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "service.go")
 
-		code := "package main\n\n//yake:skip-test\n" + generateLargeFunc("SkippedFunc", 30) + "\n" + generateLargeFunc("IncludedFunc", 30)
+		code := fmt.Sprintf("package main\n\n//yake:skip-test\n%s\n%s", generateLargeFunc("SkippedFunc", 30), generateLargeFunc("IncludedFunc", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
 		result := largeFunctions(filePath)
@@ -965,7 +1151,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		goMod := "module testproject\n\ngo 1.21\n"
 		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
 
-		code := "package main\n\n" + generateLargeFunc("BigProcess", 30)
+		code := fmt.Sprintf("package main\n\n%s", generateLargeFunc("BigProcess", 30))
 		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
 
 		// Coverage profile with no coverage for service.go
@@ -990,7 +1176,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		goMod := "module testproject\n\ngo 1.21\n"
 		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
 
-		code := "package main\n\n" + generateLargeFunc("BigProcess", 30)
+		code := fmt.Sprintf("package main\n\n%s", generateLargeFunc("BigProcess", 30))
 		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
 
 		// Coverage profile with coverage inside the function body
@@ -1014,7 +1200,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		goMod := "module testproject\n\ngo 1.21\n"
 		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
 
-		code := "//yake:skip-test\npackage main\n\n" + generateLargeFunc("BigProcess", 30)
+		code := fmt.Sprintf("//yake:skip-test\npackage main\n\n%s", generateLargeFunc("BigProcess", 30))
 		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
 
 		profile := "mode: set\n"
@@ -1036,7 +1222,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		goMod := "module testproject\n\ngo 1.21\n"
 		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
 
-		code := "package main\n\n//yake:skip-test\n" + generateLargeFunc("SkippedBigFunc", 30)
+		code := fmt.Sprintf("package main\n\n//yake:skip-test\n%s", generateLargeFunc("SkippedBigFunc", 30))
 		require.NoError(t, os.WriteFile("service.go", []byte(code), 0644))
 
 		profile := "mode: set\n"
@@ -1058,7 +1244,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		goMod := "module testproject\n\ngo 1.21\n"
 		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
 
-		code := "package main\n\nimport \"testing\"\n\n" + generateLargeFunc("TestBig", 30)
+		code := fmt.Sprintf("package main\n\nimport \"testing\"\n\n%s", generateLargeFunc("TestBig", 30))
 		require.NoError(t, os.WriteFile("service_test.go", []byte(code), 0644))
 
 		profile := "mode: set\n"
@@ -1638,7 +1824,7 @@ func Test_checkPackageNaming(t *testing.T) {
 
 		longName := "abcdefghijklmnopqrstuvwxyz1234567"
 		require.NoError(t, os.MkdirAll(filepath.Join("internal", longName), 0755))
-		require.NoError(t, os.WriteFile(filepath.Join("internal", longName, "handler.go"), []byte("package "+longName+"\n"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join("internal", longName, "handler.go"), fmt.Appendf(nil, "package %s\n", longName), 0644))
 
 		err := checkPackageNaming()
 		require.Error(t, err)
@@ -1739,7 +1925,7 @@ func Test_checkPackageNaming(t *testing.T) {
 
 		name32 := "abcdefghijklmnopqrstuvwxyz123456"
 		require.NoError(t, os.MkdirAll(filepath.Join("internal", name32), 0755))
-		require.NoError(t, os.WriteFile(filepath.Join("internal", name32, "handler.go"), []byte("package "+name32+"\n"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join("internal", name32, "handler.go"), fmt.Appendf(nil, "package %s\n", name32), 0644))
 
 		err := checkPackageNaming()
 		assert.NoError(t, err)
