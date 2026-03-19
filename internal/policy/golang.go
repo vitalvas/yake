@@ -3,6 +3,7 @@ package policy
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -14,10 +15,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
 	MinCoveragePercent        = 80.0
+	maxTestDuration           = 10 * time.Second
 	minFunctionLines          = 5
 	maxUncoveredFunctionLines = 25
 	skipDirective             = "//yake:skip-test"
@@ -47,6 +50,10 @@ func RunGolangChecks() error {
 	}
 
 	if err := checkTestFileNaming(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
+	if err := checkTestDuration(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
 
@@ -948,6 +955,68 @@ func findUncoveredLargeFunctions(profilePath string) ([]string, error) {
 	}
 
 	return violations, nil
+}
+
+func checkTestDuration() error {
+	log.Printf("Checking test duration (maximum %s per package)...", maxTestDuration)
+
+	cmd := exec.Command("go", "test", "-json", fmt.Sprintf("-timeout=%s", maxTestDuration), "./...")
+	cmd.Stderr = os.Stderr
+
+	out, err := cmd.Output()
+	if err != nil {
+		if len(out) > 0 {
+			violations := parseTestDurationOutput(out)
+			if len(violations) > 0 {
+				return fmt.Errorf("test duration violations (maximum %s per package):\n%s",
+					maxTestDuration, strings.Join(violations, "\n"))
+			}
+		}
+
+		return fmt.Errorf("failed to run test duration check: %w", err)
+	}
+
+	violations := parseTestDurationOutput(out)
+	if len(violations) > 0 {
+		return fmt.Errorf("test duration violations (maximum %s per package):\n%s",
+			maxTestDuration, strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func parseTestDurationOutput(data []byte) []string {
+	type testEvent struct {
+		Action  string  `json:"Action"`
+		Package string  `json:"Package"`
+		Elapsed float64 `json:"Elapsed"`
+	}
+
+	var violations []string
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		var event testEvent
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			continue
+		}
+
+		if event.Action != "pass" && event.Action != "fail" {
+			continue
+		}
+
+		if event.Package == "" || event.Elapsed == 0 {
+			continue
+		}
+
+		elapsed := time.Duration(event.Elapsed * float64(time.Second))
+		if elapsed > maxTestDuration {
+			violations = append(violations,
+				fmt.Sprintf("  - %s: %s (maximum %s)", event.Package, elapsed, maxTestDuration))
+		}
+	}
+
+	return violations
 }
 
 func checkCoverage() error {

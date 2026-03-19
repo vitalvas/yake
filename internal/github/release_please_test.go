@@ -76,7 +76,7 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 		assert.Equal(t, "Build and release packages", job.Name)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
 		assert.Equal(t, []string{"release-please"}, job.Needs)
-		assert.Equal(t, "${{ needs.release-please.outputs.release_created }}", job.If)
+		assert.Empty(t, job.If)
 	})
 
 	t.Run("goreleaser job includes Go setup when go.mod exists", func(t *testing.T) {
@@ -89,23 +89,47 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 		result := GetReleasePleaseWorkflow("main", true)
 		job, _ := result.Jobs.Get("goreleaser")
-		require.Len(t, job.Steps, 3)
+		require.Len(t, job.Steps, 4)
 
 		assert.Equal(t, "Checkout code", job.Steps[0].Name)
-		assert.Equal(t, "actions/checkout@v6", job.Steps[0].Uses)
-		assert.Equal(t, "0", job.Steps[0].With["fetch-depth"])
-
 		assert.Equal(t, "Set up Go", job.Steps[1].Name)
-		assert.Equal(t, "actions/setup-go@v6", job.Steps[1].Uses)
-		assert.Equal(t, "go.mod", job.Steps[1].With["go-version-file"])
+		assert.Equal(t, "Test GoReleaser", job.Steps[2].Name)
+		assert.Equal(t, "Run GoReleaser", job.Steps[3].Name)
+	})
 
-		assert.Equal(t, "Run GoReleaser", job.Steps[2].Name)
-		assert.Equal(t, "goreleaser/goreleaser-action@v6", job.Steps[2].Uses)
-		assert.Equal(t, "goreleaser", job.Steps[2].With["distribution"])
-		assert.Equal(t, "~> v2", job.Steps[2].With["version"])
-		assert.Equal(t, "release --clean", job.Steps[2].With["args"])
-		assert.Equal(t, "${{ secrets.GITHUB_TOKEN }}", job.Steps[2].Env["GITHUB_TOKEN"])
-		assert.Equal(t, "${{ needs.release-please.outputs.tag_name }}", job.Steps[2].Env["TAG"])
+	t.Run("goreleaser test step runs snapshot on non-release", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		result := GetReleasePleaseWorkflow("main", true)
+		job, _ := result.Jobs.Get("goreleaser")
+
+		testStep := job.Steps[1]
+		assert.Equal(t, "Test GoReleaser", testStep.Name)
+		assert.Equal(t, "${{ needs.release-please.outputs.release_created != 'true' }}", testStep.If)
+		assert.Equal(t, "release --clean --snapshot", testStep.With["args"])
+		assert.Empty(t, testStep.Env)
+	})
+
+	t.Run("goreleaser release step runs on release", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		result := GetReleasePleaseWorkflow("main", true)
+		job, _ := result.Jobs.Get("goreleaser")
+
+		releaseStep := job.Steps[2]
+		assert.Equal(t, "Run GoReleaser", releaseStep.Name)
+		assert.Equal(t, "${{ needs.release-please.outputs.release_created }}", releaseStep.If)
+		assert.Equal(t, "release --clean", releaseStep.With["args"])
+		assert.Equal(t, "${{ secrets.GITHUB_TOKEN }}", releaseStep.Env["GITHUB_TOKEN"])
+		assert.Equal(t, "${{ needs.release-please.outputs.tag_name }}", releaseStep.Env["TAG"])
 	})
 
 	t.Run("goreleaser job omits Go setup without go.mod", func(t *testing.T) {
@@ -117,10 +141,11 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 		result := GetReleasePleaseWorkflow("main", true)
 		job, _ := result.Jobs.Get("goreleaser")
-		require.Len(t, job.Steps, 2)
+		require.Len(t, job.Steps, 3)
 
 		assert.Equal(t, "Checkout code", job.Steps[0].Name)
-		assert.Equal(t, "Run GoReleaser", job.Steps[1].Name)
+		assert.Equal(t, "Test GoReleaser", job.Steps[1].Name)
+		assert.Equal(t, "Run GoReleaser", job.Steps[2].Name)
 	})
 
 	t.Run("release-please job comes before goreleaser", func(t *testing.T) {

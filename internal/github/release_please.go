@@ -35,7 +35,6 @@ func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
 				Name:   "Build and release packages",
 				RunsOn: "ubuntu-latest",
 				Needs:  []string{"release-please"},
-				If:     "${{ needs.release-please.outputs.release_created }}",
 				Steps:  goreleaserSteps(),
 			},
 		})
@@ -78,19 +77,32 @@ func goreleaserSteps() []WorkflowStep {
 		})
 	}
 
-	steps = append(steps, WorkflowStep{
-		Name: "Run GoReleaser",
-		Uses: "goreleaser/goreleaser-action@v6",
-		With: map[string]string{
-			"distribution": "goreleaser",
-			"version":      "~> v2",
-			"args":         "release --clean",
+	steps = append(steps,
+		WorkflowStep{
+			Name: "Test GoReleaser",
+			If:   "${{ needs.release-please.outputs.release_created != 'true' }}",
+			Uses: "goreleaser/goreleaser-action@v6",
+			With: map[string]string{
+				"distribution": "goreleaser",
+				"version":      "~> v2",
+				"args":         "release --clean --snapshot",
+			},
 		},
-		Env: map[string]string{
-			"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
-			"TAG":          "${{ needs.release-please.outputs.tag_name }}",
+		WorkflowStep{
+			Name: "Run GoReleaser",
+			If:   "${{ needs.release-please.outputs.release_created }}",
+			Uses: "goreleaser/goreleaser-action@v6",
+			With: map[string]string{
+				"distribution": "goreleaser",
+				"version":      "~> v2",
+				"args":         "release --clean",
+			},
+			Env: map[string]string{
+				"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+				"TAG":          "${{ needs.release-please.outputs.tag_name }}",
+			},
 		},
-	})
+	)
 
 	return steps
 }

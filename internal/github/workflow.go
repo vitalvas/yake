@@ -92,6 +92,7 @@ type WorkflowJob struct {
 
 type WorkflowStep struct {
 	Name string            `yaml:"name,omitempty"`
+	If   string            `yaml:"if,omitempty"`
 	Uses string            `yaml:"uses,omitempty"`
 	ID   string            `yaml:"id,omitempty"`
 	Run  string            `yaml:"run,omitempty"`

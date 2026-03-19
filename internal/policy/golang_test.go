@@ -1865,6 +1865,70 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 	})
 }
 
+func Test_parseTestDurationOutput(t *testing.T) {
+	t.Run("no violations when all packages within limit", func(t *testing.T) {
+		data := `{"Action":"pass","Package":"github.com/example/pkg1","Elapsed":2.5}
+{"Action":"pass","Package":"github.com/example/pkg2","Elapsed":5.0}
+`
+		violations := parseTestDurationOutput([]byte(data))
+		assert.Empty(t, violations)
+	})
+
+	t.Run("detects package exceeding duration", func(t *testing.T) {
+		data := `{"Action":"pass","Package":"github.com/example/fast","Elapsed":1.0}
+{"Action":"pass","Package":"github.com/example/slow","Elapsed":15.0}
+`
+		violations := parseTestDurationOutput([]byte(data))
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "github.com/example/slow")
+	})
+
+	t.Run("detects failed package exceeding duration", func(t *testing.T) {
+		data := `{"Action":"fail","Package":"github.com/example/slow","Elapsed":12.0}
+`
+		violations := parseTestDurationOutput([]byte(data))
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "github.com/example/slow")
+	})
+
+	t.Run("ignores non-pass/fail actions", func(t *testing.T) {
+		data := `{"Action":"run","Package":"github.com/example/pkg","Test":"TestFoo"}
+{"Action":"output","Package":"github.com/example/pkg","Output":"ok\n"}
+{"Action":"pass","Package":"github.com/example/pkg","Elapsed":2.0}
+`
+		violations := parseTestDurationOutput([]byte(data))
+		assert.Empty(t, violations)
+	})
+
+	t.Run("handles empty input", func(t *testing.T) {
+		violations := parseTestDurationOutput([]byte{})
+		assert.Empty(t, violations)
+	})
+
+	t.Run("handles invalid JSON lines", func(t *testing.T) {
+		data := `not json
+{"Action":"pass","Package":"github.com/example/pkg","Elapsed":2.0}
+`
+		violations := parseTestDurationOutput([]byte(data))
+		assert.Empty(t, violations)
+	})
+
+	t.Run("detects exactly at boundary", func(t *testing.T) {
+		data := `{"Action":"pass","Package":"github.com/example/pkg","Elapsed":10.0}
+`
+		violations := parseTestDurationOutput([]byte(data))
+		assert.Empty(t, violations)
+	})
+
+	t.Run("detects multiple slow packages", func(t *testing.T) {
+		data := `{"Action":"pass","Package":"github.com/example/slow1","Elapsed":11.0}
+{"Action":"pass","Package":"github.com/example/slow2","Elapsed":20.0}
+`
+		violations := parseTestDurationOutput([]byte(data))
+		assert.Len(t, violations, 2)
+	})
+}
+
 func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("parses coverage above threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 85.0% of statements"
