@@ -35,7 +35,7 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 	t.Run("contains release-please job", func(t *testing.T) {
 		result := GetReleasePleaseWorkflow("main", false)
-		job, ok := result.Jobs["release-please"]
+		job, ok := result.Jobs.Get("release-please")
 		require.True(t, ok)
 		assert.Equal(t, "Creating release", job.Name)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
@@ -43,14 +43,14 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 	t.Run("exposes job outputs", func(t *testing.T) {
 		result := GetReleasePleaseWorkflow("main", false)
-		job := result.Jobs["release-please"]
+		job, _ := result.Jobs.Get("release-please")
 		assert.Equal(t, "${{ steps.release.outputs.release_created }}", job.Outputs["release_created"])
 		assert.Equal(t, "${{ steps.release.outputs.tag_name }}", job.Outputs["tag_name"])
 	})
 
 	t.Run("configures release-please action step", func(t *testing.T) {
 		result := GetReleasePleaseWorkflow("main", false)
-		job := result.Jobs["release-please"]
+		job, _ := result.Jobs.Get("release-please")
 		require.Len(t, job.Steps, 1)
 
 		step := job.Steps[0]
@@ -63,14 +63,14 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 	t.Run("does not include goreleaser job by default", func(t *testing.T) {
 		result := GetReleasePleaseWorkflow("main", false)
-		_, ok := result.Jobs["goreleaser"]
+		_, ok := result.Jobs.Get("goreleaser")
 		assert.False(t, ok)
 		assert.Len(t, result.Jobs, 1)
 	})
 
 	t.Run("includes goreleaser job when enabled", func(t *testing.T) {
 		result := GetReleasePleaseWorkflow("main", true)
-		job, ok := result.Jobs["goreleaser"]
+		job, ok := result.Jobs.Get("goreleaser")
 		require.True(t, ok)
 		assert.Equal(t, "Build and release packages", job.Name)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
@@ -80,7 +80,7 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 	t.Run("goreleaser job has correct steps", func(t *testing.T) {
 		result := GetReleasePleaseWorkflow("main", true)
-		job := result.Jobs["goreleaser"]
+		job, _ := result.Jobs.Get("goreleaser")
 		require.Len(t, job.Steps, 3)
 
 		assert.Equal(t, "Checkout code", job.Steps[0].Name)
@@ -98,6 +98,13 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 		assert.Equal(t, "release --clean", job.Steps[2].With["args"])
 		assert.Equal(t, "${{ secrets.GITHUB_TOKEN }}", job.Steps[2].Env["GITHUB_TOKEN"])
 		assert.Equal(t, "${{ needs.release-please.outputs.tag_name }}", job.Steps[2].Env["TAG"])
+	})
+
+	t.Run("release-please job comes before goreleaser", func(t *testing.T) {
+		result := GetReleasePleaseWorkflow("main", true)
+		require.Len(t, result.Jobs, 2)
+		assert.Equal(t, "release-please", result.Jobs[0].Name)
+		assert.Equal(t, "goreleaser", result.Jobs[1].Name)
 	})
 }
 

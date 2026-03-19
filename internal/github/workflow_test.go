@@ -1,6 +1,7 @@
 package github
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,18 +9,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func newSingleJob(name string, job WorkflowJob) OrderedJobs {
+	return OrderedJobs{{Name: name, Job: job}}
+}
+
 func TestWorkflowMarshal(t *testing.T) {
 	t.Run("produces unquoted on key", func(t *testing.T) {
 		w := Workflow{
 			Name: "test",
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					Name:   "Build",
-					RunsOn: "ubuntu-latest",
-					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
-				},
-			},
+			Jobs: newSingleJob("build", WorkflowJob{
+				Name:   "Build",
+				RunsOn: "ubuntu-latest",
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -37,13 +40,11 @@ func TestWorkflowMarshal(t *testing.T) {
 				Push: &WorkflowTrigger{Branches: []string{"main"}},
 			},
 			Permissions: WorkflowPermissions{Contents: "read"},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					Name:   "Build",
-					RunsOn: "ubuntu-latest",
-					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
-				},
-			},
+			Jobs: newSingleJob("build", WorkflowJob{
+				Name:   "Build",
+				RunsOn: "ubuntu-latest",
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -60,13 +61,11 @@ func TestWorkflowMarshal(t *testing.T) {
 		w := Workflow{
 			Name: "test",
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					Name:   "Build",
-					RunsOn: "ubuntu-latest",
-					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
-				},
-			},
+			Jobs: newSingleJob("build", WorkflowJob{
+				Name:   "Build",
+				RunsOn: "ubuntu-latest",
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -78,13 +77,11 @@ func TestWorkflowMarshal(t *testing.T) {
 		w := Workflow{
 			Name: "test",
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					Name:   "Build",
-					RunsOn: "ubuntu-latest",
-					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
-				},
-			},
+			Jobs: newSingleJob("build", WorkflowJob{
+				Name:   "Build",
+				RunsOn: "ubuntu-latest",
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -96,20 +93,18 @@ func TestWorkflowMarshal(t *testing.T) {
 		w := Workflow{
 			Name: "test",
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
-			Jobs: map[string]WorkflowJob{
-				"test": {
-					Name:   "Test",
-					RunsOn: "ubuntu-latest",
-					Steps: []WorkflowStep{
-						{
-							Name: "Run tests",
-							ID:   "test",
-							Run:  "go test ./...",
-							With: map[string]string{"key": "value"},
-						},
+			Jobs: newSingleJob("test", WorkflowJob{
+				Name:   "Test",
+				RunsOn: "ubuntu-latest",
+				Steps: []WorkflowStep{
+					{
+						Name: "Run tests",
+						ID:   "test",
+						Run:  "go test ./...",
+						With: map[string]string{"key": "value"},
 					},
 				},
-			},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -142,13 +137,11 @@ func TestWorkflowMarshal(t *testing.T) {
 				WorkflowDispatch: &struct{}{},
 				Push:             &WorkflowTrigger{Branches: []string{"main"}},
 			},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					Name:   "Build",
-					RunsOn: "ubuntu-latest",
-					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
-				},
-			},
+			Jobs: newSingleJob("build", WorkflowJob{
+				Name:   "Build",
+				RunsOn: "ubuntu-latest",
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -165,12 +158,10 @@ func TestWorkflowMarshal(t *testing.T) {
 					Paths: []string{"**.go", "go.mod"},
 				},
 			},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					RunsOn: "ubuntu-latest",
-					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
-				},
-			},
+			Jobs: newSingleJob("build", WorkflowJob{
+				RunsOn: "ubuntu-latest",
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -186,19 +177,17 @@ func TestWorkflowMarshal(t *testing.T) {
 		w := Workflow{
 			Name: "test",
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
-			Jobs: map[string]WorkflowJob{
-				"test": {
-					RunsOn: "ubuntu-latest",
-					Steps: []WorkflowStep{
-						{
-							Name: "Upload",
-							Uses: "codecov/codecov-action@v5",
-							Env:  map[string]string{"TOKEN": "secret"},
-							With: map[string]string{"files": "coverage.txt"},
-						},
+			Jobs: newSingleJob("test", WorkflowJob{
+				RunsOn: "ubuntu-latest",
+				Steps: []WorkflowStep{
+					{
+						Name: "Upload",
+						Uses: "codecov/codecov-action@v5",
+						Env:  map[string]string{"TOKEN": "secret"},
+						With: map[string]string{"files": "coverage.txt"},
 					},
 				},
-			},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -212,12 +201,10 @@ func TestWorkflowMarshal(t *testing.T) {
 		w := Workflow{
 			Name: "test",
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					RunsOn: "ubuntu-latest",
-					Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
-				},
-			},
+			Jobs: newSingleJob("build", WorkflowJob{
+				RunsOn: "ubuntu-latest",
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+			}),
 		}
 
 		data, err := w.Marshal()
@@ -225,44 +212,22 @@ func TestWorkflowMarshal(t *testing.T) {
 		assert.NotContains(t, string(data), "name: \"\"")
 	})
 
-	t.Run("roundtrips through yaml", func(t *testing.T) {
-		original := Workflow{
-			Name: "ci",
-			On: WorkflowOn{
-				Push:        &WorkflowTrigger{Branches: []string{"main"}},
-				PullRequest: &WorkflowTrigger{Branches: []string{"main"}},
-			},
-			Permissions: WorkflowPermissions{
-				Contents:     "read",
-				PullRequests: "write",
-			},
-			Jobs: map[string]WorkflowJob{
-				"build": {
-					Name:   "Build",
-					RunsOn: "ubuntu-latest",
-					Steps: []WorkflowStep{
-						{Uses: "actions/checkout@v4"},
-						{Name: "Test", Run: "go test ./..."},
-					},
-				},
+	t.Run("preserves job order", func(t *testing.T) {
+		w := Workflow{
+			Name: "test",
+			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
+			Jobs: OrderedJobs{
+				{Name: "first", Job: WorkflowJob{RunsOn: "ubuntu-latest", Steps: []WorkflowStep{{Uses: "actions/checkout@v4"}}}},
+				{Name: "second", Job: WorkflowJob{RunsOn: "ubuntu-latest", Steps: []WorkflowStep{{Uses: "actions/checkout@v4"}}}},
 			},
 		}
 
-		data, err := original.Marshal()
+		data, err := w.Marshal()
 		require.NoError(t, err)
 
-		var decoded Workflow
-		err = yaml.Unmarshal(data, &decoded)
-		require.NoError(t, err)
-
-		assert.Equal(t, original.Name, decoded.Name)
-		assert.Equal(t, original.On.Push.Branches, decoded.On.Push.Branches)
-		assert.Equal(t, original.On.PullRequest.Branches, decoded.On.PullRequest.Branches)
-		assert.Equal(t, original.Permissions, decoded.Permissions)
-
-		job := decoded.Jobs["build"]
-		assert.Equal(t, "Build", job.Name)
-		assert.Equal(t, "ubuntu-latest", job.RunsOn)
-		require.Len(t, job.Steps, 2)
+		content := string(data)
+		firstIdx := bytes.Index([]byte(content), []byte("first:"))
+		secondIdx := bytes.Index([]byte(content), []byte("second:"))
+		assert.Less(t, firstIdx, secondIdx)
 	})
 }

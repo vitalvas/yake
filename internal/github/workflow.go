@@ -7,10 +7,10 @@ import (
 )
 
 type Workflow struct {
-	Name        string                 `yaml:"name"`
-	On          WorkflowOn             `yaml:"on"`
-	Permissions WorkflowPermissions    `yaml:"permissions,omitempty"`
-	Jobs        map[string]WorkflowJob `yaml:"jobs"`
+	Name        string              `yaml:"name"`
+	On          WorkflowOn          `yaml:"on"`
+	Permissions WorkflowPermissions `yaml:"permissions,omitempty"`
+	Jobs        OrderedJobs         `yaml:"jobs"`
 }
 
 // Marshal encodes the workflow to YAML with unquoted "on" key.
@@ -45,6 +45,40 @@ type WorkflowPermissions struct {
 	Contents     string `yaml:"contents,omitempty"`
 	Issues       string `yaml:"issues,omitempty"`
 	PullRequests string `yaml:"pull-requests,omitempty"`
+}
+
+type OrderedJobs []JobEntry
+
+type JobEntry struct {
+	Name string
+	Job  WorkflowJob
+}
+
+func (o OrderedJobs) Get(name string) (WorkflowJob, bool) {
+	for _, e := range o {
+		if e.Name == name {
+			return e.Job, true
+		}
+	}
+
+	return WorkflowJob{}, false
+}
+
+func (o OrderedJobs) MarshalYAML() (interface{}, error) {
+	node := &yaml.Node{Kind: yaml.MappingNode}
+
+	for _, e := range o {
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: e.Name}
+
+		var valNode yaml.Node
+		if err := valNode.Encode(e.Job); err != nil {
+			return nil, err
+		}
+
+		node.Content = append(node.Content, keyNode, &valNode)
+	}
+
+	return node, nil
 }
 
 type WorkflowJob struct {

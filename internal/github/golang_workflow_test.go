@@ -34,7 +34,7 @@ func TestGetGolangWorkflow(t *testing.T) {
 
 	t.Run("contains linter job", func(t *testing.T) {
 		result := GetGolangWorkflow()
-		job, ok := result.Jobs["linter"]
+		job, ok := result.Jobs.Get("linter")
 		require.True(t, ok)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
 		require.Len(t, job.Steps, 3)
@@ -48,7 +48,7 @@ func TestGetGolangWorkflow(t *testing.T) {
 
 	t.Run("contains tests job", func(t *testing.T) {
 		result := GetGolangWorkflow()
-		job, ok := result.Jobs["tests"]
+		job, ok := result.Jobs.Get("tests")
 		require.True(t, ok)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
 		require.Len(t, job.Steps, 5)
