@@ -1,5 +1,7 @@
 package github
 
+import "os"
+
 func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
 	jobs := OrderedJobs{
 		{
@@ -34,35 +36,7 @@ func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
 				RunsOn: "ubuntu-latest",
 				Needs:  []string{"release-please"},
 				If:     "${{ needs.release-please.outputs.release_created }}",
-				Steps: []WorkflowStep{
-					{
-						Name: "Checkout code",
-						Uses: "actions/checkout@v6",
-						With: map[string]string{
-							"fetch-depth": "0",
-						},
-					},
-					{
-						Name: "Set up Go",
-						Uses: "actions/setup-go@v6",
-						With: map[string]string{
-							"go-version-file": "go.mod",
-						},
-					},
-					{
-						Name: "Run GoReleaser",
-						Uses: "goreleaser/goreleaser-action@v6",
-						With: map[string]string{
-							"distribution": "goreleaser",
-							"version":      "~> v2",
-							"args":         "release --clean",
-						},
-						Env: map[string]string{
-							"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
-							"TAG":          "${{ needs.release-please.outputs.tag_name }}",
-						},
-					},
-				},
+				Steps:  goreleaserSteps(),
 			},
 		})
 	}
@@ -81,6 +55,44 @@ func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
 		},
 		Jobs: jobs,
 	}
+}
+
+func goreleaserSteps() []WorkflowStep {
+	steps := []WorkflowStep{
+		{
+			Name: "Checkout code",
+			Uses: "actions/checkout@v6",
+			With: map[string]string{
+				"fetch-depth": "0",
+			},
+		},
+	}
+
+	if _, err := os.Stat("go.mod"); err == nil {
+		steps = append(steps, WorkflowStep{
+			Name: "Set up Go",
+			Uses: "actions/setup-go@v6",
+			With: map[string]string{
+				"go-version-file": "go.mod",
+			},
+		})
+	}
+
+	steps = append(steps, WorkflowStep{
+		Name: "Run GoReleaser",
+		Uses: "goreleaser/goreleaser-action@v6",
+		With: map[string]string{
+			"distribution": "goreleaser",
+			"version":      "~> v2",
+			"args":         "release --clean",
+		},
+		Env: map[string]string{
+			"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+			"TAG":          "${{ needs.release-please.outputs.tag_name }}",
+		},
+	})
+
+	return steps
 }
 
 type ReleasePleaseConfig struct {

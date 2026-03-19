@@ -1,6 +1,7 @@
 package github
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,7 +79,14 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 		assert.Equal(t, "${{ needs.release-please.outputs.release_created }}", job.If)
 	})
 
-	t.Run("goreleaser job has correct steps", func(t *testing.T) {
+	t.Run("goreleaser job includes Go setup when go.mod exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		require.NoError(t, os.WriteFile("go.mod", []byte("module test\n"), 0644))
+
 		result := GetReleasePleaseWorkflow("main", true)
 		job, _ := result.Jobs.Get("goreleaser")
 		require.Len(t, job.Steps, 3)
@@ -98,6 +106,21 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 		assert.Equal(t, "release --clean", job.Steps[2].With["args"])
 		assert.Equal(t, "${{ secrets.GITHUB_TOKEN }}", job.Steps[2].Env["GITHUB_TOKEN"])
 		assert.Equal(t, "${{ needs.release-please.outputs.tag_name }}", job.Steps[2].Env["TAG"])
+	})
+
+	t.Run("goreleaser job omits Go setup without go.mod", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		result := GetReleasePleaseWorkflow("main", true)
+		job, _ := result.Jobs.Get("goreleaser")
+		require.Len(t, job.Steps, 2)
+
+		assert.Equal(t, "Checkout code", job.Steps[0].Name)
+		assert.Equal(t, "Run GoReleaser", job.Steps[1].Name)
 	})
 
 	t.Run("release-please job comes before goreleaser", func(t *testing.T) {
