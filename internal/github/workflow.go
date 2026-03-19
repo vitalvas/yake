@@ -50,6 +50,8 @@ type WorkflowPermissions struct {
 type WorkflowJob struct {
 	Name    string            `yaml:"name,omitempty"`
 	RunsOn  string            `yaml:"runs-on"`
+	Needs   []string          `yaml:"needs,omitempty"`
+	If      string            `yaml:"if,omitempty"`
 	Outputs map[string]string `yaml:"outputs,omitempty"`
 	Steps   []WorkflowStep    `yaml:"steps"`
 }

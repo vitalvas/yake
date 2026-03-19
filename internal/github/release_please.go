@@ -1,7 +1,7 @@
 package github
 
-func GetReleasePleaseWorkflow(branch string) Workflow {
-	return Workflow{
+func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
+	workflow := Workflow{
 		Name: "release-please",
 		On: WorkflowOn{
 			Push: &WorkflowTrigger{
@@ -35,6 +35,46 @@ func GetReleasePleaseWorkflow(branch string) Workflow {
 			},
 		},
 	}
+
+	if goreleaser {
+		workflow.Jobs["goreleaser"] = WorkflowJob{
+			Name:   "Build and release packages",
+			RunsOn: "ubuntu-latest",
+			Needs:  []string{"release-please"},
+			If:     "${{ needs.release-please.outputs.release_created }}",
+			Steps: []WorkflowStep{
+				{
+					Name: "Checkout code",
+					Uses: "actions/checkout@v6",
+					With: map[string]string{
+						"fetch-depth": "0",
+					},
+				},
+				{
+					Name: "Set up Go",
+					Uses: "actions/setup-go@v6",
+					With: map[string]string{
+						"go-version-file": "go.mod",
+					},
+				},
+				{
+					Name: "Run GoReleaser",
+					Uses: "goreleaser/goreleaser-action@v6",
+					With: map[string]string{
+						"distribution": "goreleaser",
+						"version":      "~> v2",
+						"args":         "release --clean",
+					},
+					Env: map[string]string{
+						"GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+						"TAG":          "${{ needs.release-please.outputs.tag_name }}",
+					},
+				},
+			},
+		}
+	}
+
+	return workflow
 }
 
 type ReleasePleaseConfig struct {

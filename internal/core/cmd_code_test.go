@@ -311,7 +311,7 @@ func TestCodeGithubReleasePlease(t *testing.T) {
 		os.Chdir(tmpDir)
 		initTestGitRepo(t, "main")
 
-		err := codeGithubReleasePlease()
+		err := codeGithubReleasePlease(releasePleaseConfig{})
 		assert.NoError(t, err)
 
 		_, statErr := os.Stat(".github/workflows/release-please.yml")
@@ -332,7 +332,7 @@ func TestCodeGithubReleasePlease(t *testing.T) {
 		os.Chdir(tmpDir)
 		initTestGitRepo(t, "main")
 
-		err := codeGithubReleasePlease()
+		err := codeGithubReleasePlease(releasePleaseConfig{})
 		require.NoError(t, err)
 
 		content, readErr := os.ReadFile(".github/workflows/release-please.yml")
@@ -348,7 +348,7 @@ func TestCodeGithubReleasePlease(t *testing.T) {
 		os.Chdir(tmpDir)
 		initTestGitRepo(t, "master")
 
-		err := codeGithubReleasePlease()
+		err := codeGithubReleasePlease(releasePleaseConfig{})
 		assert.NoError(t, err)
 
 		info, statErr := os.Stat(".github/workflows")
@@ -364,7 +364,7 @@ func TestCodeGithubReleasePlease(t *testing.T) {
 		os.Chdir(tmpDir)
 		initTestGitRepo(t, "develop")
 
-		err := codeGithubReleasePlease()
+		err := codeGithubReleasePlease(releasePleaseConfig{})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "could not detect default branch")
 	})

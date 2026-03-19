@@ -89,26 +89,38 @@ var codeSubcommands = []*cobra.Command{
 	createGithubLangGolangCommand(),
 }
 
+type releasePleaseConfig struct {
+	Force      bool
+	GoReleaser bool
+}
+
 func createGithubReleasePleaseCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "github-release-please",
 		Short: "Create GitHub Release Please configuration",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			force, _ := cmd.Flags().GetBool("force")
+			goreleaser, _ := cmd.Flags().GetBool("goreleaser")
 
-			if force {
-				return codeGithubReleasePleaseWorkflow()
+			cfg := releasePleaseConfig{
+				Force:      force,
+				GoReleaser: goreleaser,
+			}
+
+			if cfg.Force {
+				return codeGithubReleasePleaseWorkflow(cfg)
 			}
 
 			if _, err := os.Stat(".github/workflows/release-please.yml"); err == nil {
 				return fmt.Errorf("release-please workflow already exists")
 			}
 
-			return codeGithubReleasePlease()
+			return codeGithubReleasePlease(cfg)
 		},
 	}
 
 	cmd.Flags().Bool("force", false, "Re-create workflow file if it already exists")
+	cmd.Flags().Bool("goreleaser", false, "Add GoReleaser job to the workflow")
 
 	return cmd
 }
@@ -133,7 +145,7 @@ func codeGithubDependabot(lang github.Lang) error {
 	return tools.WriteYamlFile(".github/dependabot.yml", payload)
 }
 
-func codeGithubReleasePleaseWorkflow() error {
+func codeGithubReleasePleaseWorkflow(cfg releasePleaseConfig) error {
 	branch, err := tools.DetectDefaultBranch()
 	if err != nil {
 		return err
@@ -145,7 +157,7 @@ func codeGithubReleasePleaseWorkflow() error {
 
 	log.Println("Creating .github/workflows/release-please.yml")
 
-	workflow := github.GetReleasePleaseWorkflow(branch)
+	workflow := github.GetReleasePleaseWorkflow(branch, cfg.GoReleaser)
 
 	data, err := workflow.Marshal()
 	if err != nil {
@@ -190,8 +202,8 @@ func codeGithubLangGolang() error {
 	return tools.WriteStringToFile(".github/workflows/golang.yml", content)
 }
 
-func codeGithubReleasePlease() error {
-	if err := codeGithubReleasePleaseWorkflow(); err != nil {
+func codeGithubReleasePlease(cfg releasePleaseConfig) error {
+	if err := codeGithubReleasePleaseWorkflow(cfg); err != nil {
 		return err
 	}
 
