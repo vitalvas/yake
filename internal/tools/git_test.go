@@ -84,6 +84,21 @@ func TestDetectDefaultBranch(t *testing.T) {
 		assert.Equal(t, "main", branch)
 	})
 
+	t.Run("falls back to current branch name on empty repo", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		cmd := exec.Command("git", "init", "-b", "main")
+		require.NoError(t, cmd.Run())
+
+		branch, err := DetectDefaultBranch()
+		require.NoError(t, err)
+		assert.Equal(t, "main", branch)
+	})
+
 	t.Run("returns error when no default branch found", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()

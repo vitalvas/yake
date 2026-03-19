@@ -25,5 +25,13 @@ func DetectDefaultBranch() (string, error) {
 		return "master", nil
 	}
 
+	out, err = exec.Command("git", "symbolic-ref", "--short", "HEAD").Output()
+	if err == nil {
+		branch := strings.TrimSpace(string(out))
+		if branch == "main" || branch == "master" {
+			return branch, nil
+		}
+	}
+
 	return "", fmt.Errorf("could not detect default branch")
 }
