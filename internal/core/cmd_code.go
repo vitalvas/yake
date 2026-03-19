@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vitalvas/yake/internal/github"
+	"github.com/vitalvas/yake/internal/goreleaser"
 	"github.com/vitalvas/yake/internal/linter"
 	"github.com/vitalvas/yake/internal/tools"
 )
@@ -87,6 +88,7 @@ var codeSubcommands = []*cobra.Command{
 	createGithubDependabotCommand(),
 	createGithubReleasePleaseCommand(),
 	createGithubLangGolangCommand(),
+	createGoreleaserCommand(),
 }
 
 type releasePleaseConfig struct {
@@ -219,4 +221,36 @@ func codeGithubReleasePlease(cfg releasePleaseConfig) error {
 	manifest := github.GetReleasePleaseManifest()
 
 	return tools.WriteJSONFile(".github/release-please-manifest.json", manifest)
+}
+
+func createGoreleaserCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "goreleaser",
+		Short: "Create GoReleaser configuration",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if _, err := os.Stat(".goreleaser.yml"); err == nil {
+				return fmt.Errorf("goreleaser config file already exists")
+			}
+
+			return codeGoreleaser()
+		},
+	}
+}
+
+func codeGoreleaser() error {
+	repo, err := tools.DetectGitHubRepo()
+	if err != nil {
+		return err
+	}
+
+	log.Println("Creating .goreleaser.yml")
+
+	cfg := goreleaser.GetConfig(repo.Owner, repo.Name)
+
+	data, err := cfg.Marshal()
+	if err != nil {
+		return err
+	}
+
+	return tools.WriteStringToFile(".goreleaser.yml", string(data))
 }

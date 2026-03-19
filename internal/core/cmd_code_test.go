@@ -131,7 +131,7 @@ func TestCreateGithubDependabotCommand(t *testing.T) {
 
 func TestCodeSubcommands(t *testing.T) {
 	t.Run("contains expected subcommands", func(t *testing.T) {
-		require.GreaterOrEqual(t, len(codeSubcommands), 5)
+		require.GreaterOrEqual(t, len(codeSubcommands), 6)
 
 		uses := make([]string, len(codeSubcommands))
 		for i, cmd := range codeSubcommands {
@@ -143,6 +143,7 @@ func TestCodeSubcommands(t *testing.T) {
 		assert.Contains(t, uses, "github-dependabot")
 		assert.Contains(t, uses, "github-release-please")
 		assert.Contains(t, uses, "github-lang-golang")
+		assert.Contains(t, uses, "goreleaser")
 	})
 }
 
@@ -496,6 +497,95 @@ func TestCreateGithubLangGolangCommand(t *testing.T) {
 
 		_, statErr := os.Stat(".github/workflows/golang.yml")
 		assert.NoError(t, statErr)
+	})
+}
+
+func TestCreateGoreleaserCommand(t *testing.T) {
+	t.Run("returns valid command", func(t *testing.T) {
+		cmd := createGoreleaserCommand()
+
+		require.NotNil(t, cmd)
+		assert.Equal(t, "goreleaser", cmd.Use)
+		assert.NotNil(t, cmd.RunE)
+	})
+
+	t.Run("returns error when config already exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		os.WriteFile(".goreleaser.yml", []byte(""), 0644)
+
+		cmd := createGoreleaserCommand()
+		cmd.SetArgs([]string{})
+
+		err := cmd.Execute()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "already exists")
+	})
+
+	t.Run("creates config file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		initTestGitRepo(t, "main")
+
+		gitCmd := exec.Command("git", "remote", "add", "origin", "https://github.com/testowner/testrepo.git")
+		require.NoError(t, gitCmd.Run())
+
+		cmd := createGoreleaserCommand()
+		cmd.SetArgs([]string{})
+
+		err := cmd.Execute()
+		assert.NoError(t, err)
+
+		content, readErr := os.ReadFile(".goreleaser.yml")
+		require.NoError(t, readErr)
+		assert.Contains(t, string(content), "testowner")
+		assert.Contains(t, string(content), "testrepo")
+	})
+}
+
+func TestCodeGoreleaser(t *testing.T) {
+	t.Run("creates config with correct owner and repo", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		initTestGitRepo(t, "main")
+
+		gitCmd := exec.Command("git", "remote", "add", "origin", "git@github.com:myowner/myapp.git")
+		require.NoError(t, gitCmd.Run())
+
+		err := codeGoreleaser()
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(".goreleaser.yml")
+		require.NoError(t, readErr)
+
+		str := string(content)
+		assert.Contains(t, str, "owner: myowner")
+		assert.Contains(t, str, "name: myapp")
+		assert.Contains(t, str, "binary: myapp")
+		assert.Contains(t, str, "id: myapp")
+		assert.Contains(t, str, "version: 2")
+		assert.Contains(t, str, "CGO_ENABLED=0")
+	})
+
+	t.Run("returns error without origin remote", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		initTestGitRepo(t, "main")
+
+		err := codeGoreleaser()
+		assert.Error(t, err)
 	})
 }
 

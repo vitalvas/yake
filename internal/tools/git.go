@@ -35,3 +35,44 @@ func DetectDefaultBranch() (string, error) {
 
 	return "", fmt.Errorf("could not detect default branch")
 }
+
+type GitHubRepo struct {
+	Owner string
+	Name  string
+}
+
+func DetectGitHubRepo() (GitHubRepo, error) {
+	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
+	if err != nil {
+		return GitHubRepo{}, fmt.Errorf("could not detect GitHub repository: no origin remote")
+	}
+
+	url := strings.TrimSpace(string(out))
+
+	owner, name, ok := parseGitHubURL(url)
+	if !ok {
+		return GitHubRepo{}, fmt.Errorf("could not parse GitHub repository from URL: %s", url)
+	}
+
+	return GitHubRepo{Owner: owner, Name: name}, nil
+}
+
+func parseGitHubURL(url string) (owner, name string, ok bool) {
+	url = strings.TrimSuffix(url, ".git")
+
+	if path, found := strings.CutPrefix(url, "https://github.com/"); found {
+		parts := strings.Split(path, "/")
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+	}
+
+	if path, found := strings.CutPrefix(url, "git@github.com:"); found {
+		parts := strings.Split(path, "/")
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+	}
+
+	return "", "", false
+}
