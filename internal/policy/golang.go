@@ -583,13 +583,15 @@ func validateTestFileName(testPath string) []string {
 		}
 	}
 
-	sourcePath := filepath.Join(dir, expectedSourceFile)
+	if !isStandardTestFile(filename) {
+		sourcePath := filepath.Join(dir, expectedSourceFile)
 
-	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-		violations = append(violations, fmt.Sprintf("  - %s: missing source file '%s'", testPath, sourcePath))
+		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+			violations = append(violations, fmt.Sprintf("  - %s: missing source file '%s'", testPath, sourcePath))
+		}
 	}
 
-	if !hasTestingImport(testPath) {
+	if !isStandardTestFile(filename) && !hasTestingImport(testPath) {
 		violations = append(violations, fmt.Sprintf("  - %s: missing 'testing' package import", testPath))
 	}
 
@@ -616,6 +618,15 @@ func validateSourceFile(sourcePath string) []string {
 	}
 
 	return violations
+}
+
+var standardTestFiles = map[string]bool{
+	"example_test.go":  true,
+	"external_test.go": true,
+}
+
+func isStandardTestFile(filename string) bool {
+	return standardTestFiles[filename]
 }
 
 func hasSkipDirective(filePath string) bool {

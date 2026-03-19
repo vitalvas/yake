@@ -885,6 +885,24 @@ func Test_isStringLit(t *testing.T) {
 	})
 }
 
+func Test_isStandardTestFile(t *testing.T) {
+	t.Run("example_test.go is standard", func(t *testing.T) {
+		assert.True(t, isStandardTestFile("example_test.go"))
+	})
+
+	t.Run("external_test.go is standard", func(t *testing.T) {
+		assert.True(t, isStandardTestFile("external_test.go"))
+	})
+
+	t.Run("service_test.go is not standard", func(t *testing.T) {
+		assert.False(t, isStandardTestFile("service_test.go"))
+	})
+
+	t.Run("regular file is not standard", func(t *testing.T) {
+		assert.False(t, isStandardTestFile("main.go"))
+	})
+}
+
 func Test_validateTestFileName(t *testing.T) {
 	t.Run("valid test file with source", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -999,6 +1017,46 @@ func Test_validateTestFileName(t *testing.T) {
 		violations := validateTestFileName("service_integration_test.go")
 		require.NotEmpty(t, violations)
 		assert.Contains(t, violations[0], "invalid naming pattern")
+	})
+
+	t.Run("allows example_test.go without source file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("example_test.go", []byte(validTestFile), 0644))
+
+		violations := validateTestFileName("example_test.go")
+		assert.Empty(t, violations)
+	})
+
+	t.Run("allows example_test.go without testing import", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		exampleFile := "package test\n\nimport \"fmt\"\n\nfunc ExampleHello() {\n\tfmt.Println(\"hello\")\n\t// Output: hello\n}\n"
+		require.NoError(t, os.WriteFile("example_test.go", []byte(exampleFile), 0644))
+
+		violations := validateTestFileName("example_test.go")
+		assert.Empty(t, violations)
+	})
+
+	t.Run("allows external_test.go without source file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("external_test.go", []byte(validTestFile), 0644))
+
+		violations := validateTestFileName("external_test.go")
+		assert.Empty(t, violations)
 	})
 
 	t.Run("test file in subdirectory", func(t *testing.T) {
