@@ -127,9 +127,7 @@ func validateMainFiles(paths []string) []string {
 				hasMain = true
 
 				if fn.Body != nil {
-					startLine := fset.Position(fn.Body.Lbrace).Line
-					endLine := fset.Position(fn.Body.Rbrace).Line
-					lines := endLine - startLine - 1
+					lines := countCodeLines(fset, path, fn.Body.Lbrace, fn.Body.Rbrace)
 
 					if lines > maxUncoveredFunctionLines {
 						violations = append(violations,
@@ -710,6 +708,27 @@ func hasFunctions(filePath string) bool {
 	return false
 }
 
+func countCodeLines(fset *token.FileSet, filePath string, lbrace, rbrace token.Pos) int {
+	startLine := fset.Position(lbrace).Line
+	endLine := fset.Position(rbrace).Line
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return endLine - startLine - 1
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	count := 0
+	for i := startLine; i < endLine-1; i++ {
+		if i < len(lines) && strings.TrimSpace(lines[i]) != "" {
+			count++
+		}
+	}
+
+	return count
+}
+
 func hasSignificantFunctions(filePath string) bool {
 	fset := token.NewFileSet()
 
@@ -724,10 +743,7 @@ func hasSignificantFunctions(filePath string) bool {
 				continue
 			}
 
-			startLine := fset.Position(fn.Body.Lbrace).Line
-			endLine := fset.Position(fn.Body.Rbrace).Line
-			lines := endLine - startLine - 1
-
+			lines := countCodeLines(fset, filePath, fn.Body.Lbrace, fn.Body.Rbrace)
 			if lines > minFunctionLines {
 				return true
 			}
@@ -768,7 +784,7 @@ func largeFunctions(filePath string) []funcInfo {
 
 		startLine := fset.Position(fn.Body.Lbrace).Line
 		endLine := fset.Position(fn.Body.Rbrace).Line
-		lines := endLine - startLine - 1
+		lines := countCodeLines(fset, filePath, fn.Body.Lbrace, fn.Body.Rbrace)
 
 		if lines <= maxUncoveredFunctionLines {
 			continue

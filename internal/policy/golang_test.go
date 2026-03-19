@@ -1396,8 +1396,162 @@ func Process() error {
 		assert.False(t, hasSignificantFunctions(filePath))
 	})
 
+	t.Run("returns false when blank lines inflate count to boundary", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "main.go")
+
+		code := `package main
+
+func main() {
+	x := 1
+	y := 2
+
+	z := x + y
+
+	_ = z
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.False(t, hasSignificantFunctions(filePath))
+	})
+
+	t.Run("returns true when code lines exceed threshold despite blanks", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "service.go")
+
+		code := `package main
+
+func Process() error {
+	a := 1
+
+	b := 2
+
+	c := 3
+
+	d := 4
+
+	e := 5
+
+	_ = a + b + c + d + e
+	return nil
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.True(t, hasSignificantFunctions(filePath))
+	})
+
+	t.Run("returns false for exactly 5 code lines with blanks", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "main.go")
+
+		code := `package main
+
+import "os"
+
+func main() {
+	cmd := newCommand()
+	cmd.Version = version
+
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		assert.False(t, hasSignificantFunctions(filePath))
+	})
+
 	t.Run("returns false for non-existent file", func(t *testing.T) {
 		assert.False(t, hasSignificantFunctions("/non/existent/file.go"))
+	})
+}
+
+func Test_countCodeLines(t *testing.T) {
+	t.Run("counts only non-blank lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "test.go")
+
+		code := `package main
+
+func foo() {
+	a := 1
+
+	b := 2
+
+	_ = a + b
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+		require.NoError(t, err)
+
+		fn := node.Decls[0].(*ast.FuncDecl)
+		lines := countCodeLines(fset, filePath, fn.Body.Lbrace, fn.Body.Rbrace)
+		assert.Equal(t, 3, lines)
+	})
+
+	t.Run("counts all lines when no blanks", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "test.go")
+
+		code := `package main
+
+func foo() {
+	a := 1
+	b := 2
+	c := 3
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+		require.NoError(t, err)
+
+		fn := node.Decls[0].(*ast.FuncDecl)
+		lines := countCodeLines(fset, filePath, fn.Body.Lbrace, fn.Body.Rbrace)
+		assert.Equal(t, 3, lines)
+	})
+
+	t.Run("returns zero for empty body", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "test.go")
+
+		code := `package main
+
+func foo() {
+}
+`
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+		require.NoError(t, err)
+
+		fn := node.Decls[0].(*ast.FuncDecl)
+		lines := countCodeLines(fset, filePath, fn.Body.Lbrace, fn.Body.Rbrace)
+		assert.Equal(t, 0, lines)
+	})
+
+	t.Run("returns zero for body with only blank lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		filePath := filepath.Join(tmpDir, "test.go")
+
+		code := "package main\n\nfunc foo() {\n\n\n\n}\n"
+		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
+
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+		require.NoError(t, err)
+
+		fn := node.Decls[0].(*ast.FuncDecl)
+		lines := countCodeLines(fset, filePath, fn.Body.Lbrace, fn.Body.Rbrace)
+		assert.Equal(t, 0, lines)
 	})
 }
 
@@ -2066,13 +2220,14 @@ func Test_checkTestFileNaming(t *testing.T) {
 
 		os.Chdir(tmpDir)
 
-		sourceCode := `package main
+		sourceCode := `package authcache
 
 func AuthCache() error {
 	cache := make(map[string]string)
 	cache["key"] = "value"
 	cache["key2"] = "value2"
 	cache["key3"] = "value3"
+	cache["key4"] = "value4"
 	_ = cache
 	return nil
 }
