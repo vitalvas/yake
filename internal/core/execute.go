@@ -29,6 +29,7 @@ func Execute() {
 	rootCmd.AddCommand(codeCmd)
 	rootCmd.AddCommand(createTestsCommand())
 	rootCmd.AddCommand(createPolicyCommand())
+	rootCmd.AddCommand(createGitCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
