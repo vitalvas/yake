@@ -127,6 +127,74 @@ func Test_checkEntryPoints(t *testing.T) {
 		assert.Contains(t, err.Error(), "entry point violation")
 	})
 
+	t.Run("rejects package main in non-main.go file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.WriteFile("version.go", []byte("package main\n\nvar version = \"dev\"\n"), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "version.go")
+		assert.Contains(t, err.Error(), "package main only allowed in main.go")
+	})
+
+	t.Run("rejects package main in cmd non-main.go file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("cmd/app", 0755))
+		require.NoError(t, os.WriteFile("cmd/app/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.WriteFile("cmd/app/config.go", []byte("package main\n\nvar cfg = \"default\"\n"), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cmd/app/config.go")
+		assert.Contains(t, err.Error(), "package main only allowed in main.go")
+	})
+
+	t.Run("allows non-main package files alongside main.go", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/pkg", 0755))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/pkg/lib.go", []byte("package pkg\n\nvar x = 1\n"), 0644))
+
+		err := checkEntryPoints()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("rejects test file with package main", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.WriteFile("main_test.go", []byte("package main\n\nimport \"testing\"\n\nfunc TestMain(t *testing.T) {}\n"), 0644))
+
+		err := checkEntryPoints()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "main_test.go")
+		assert.Contains(t, err.Error(), "package main only allowed in main.go")
+	})
+
 	t.Run("rejects extra functions in main.go", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()

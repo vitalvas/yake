@@ -104,11 +104,51 @@ func checkEntryPoints() error {
 	mainFiles = append(mainFiles, cmdMains...)
 
 	violations := validateMainFiles(mainFiles)
+
+	nonMainViolations := findNonMainEntryPoints()
+	violations = append(violations, nonMainViolations...)
+
 	if len(violations) > 0 {
 		return fmt.Errorf("entry point violations:\n%s", strings.Join(violations, "\n"))
 	}
 
 	return nil
+}
+
+func findNonMainEntryPoints() []string {
+	var violations []string
+
+	_ = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+
+		if info.Name() == "main.go" {
+			return nil
+		}
+
+		if extractPackageName(path) == "main" {
+			violations = append(violations,
+				fmt.Sprintf("  - %s: package main only allowed in main.go files", path))
+		}
+
+		return nil
+	})
+
+	return violations
 }
 
 func validateMainFiles(paths []string) []string {
