@@ -863,25 +863,56 @@ func Test_findStringConcatenations(t *testing.T) {
 
 		assert.Len(t, violations, 2)
 	})
+
+	t.Run("reports chained concat only once", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := "package main\n\nvar x = \"a\" + \"b\" + \"c\"\n"
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findStringConcatenations(path)
+
+		assert.Len(t, violations, 1)
+	})
 }
 
-func Test_isStringLit(t *testing.T) {
+func Test_containsStringLit(t *testing.T) {
 	t.Run("returns true for string literal", func(t *testing.T) {
 		lit := &ast.BasicLit{Kind: token.STRING, Value: `"hello"`}
 
-		assert.True(t, isStringLit(lit))
+		assert.True(t, containsStringLit(lit))
 	})
 
 	t.Run("returns false for int literal", func(t *testing.T) {
 		lit := &ast.BasicLit{Kind: token.INT, Value: "42"}
 
-		assert.False(t, isStringLit(lit))
+		assert.False(t, containsStringLit(lit))
 	})
 
 	t.Run("returns false for identifier", func(t *testing.T) {
 		ident := &ast.Ident{Name: "x"}
 
-		assert.False(t, isStringLit(ident))
+		assert.False(t, containsStringLit(ident))
+	})
+
+	t.Run("returns true for nested string concat", func(t *testing.T) {
+		inner := &ast.BinaryExpr{
+			X:  &ast.Ident{Name: "x"},
+			Op: token.ADD,
+			Y:  &ast.BasicLit{Kind: token.STRING, Value: `"b"`},
+		}
+
+		assert.True(t, containsStringLit(inner))
+	})
+
+	t.Run("returns false for nested int addition", func(t *testing.T) {
+		inner := &ast.BinaryExpr{
+			X:  &ast.BasicLit{Kind: token.INT, Value: "1"},
+			Op: token.ADD,
+			Y:  &ast.BasicLit{Kind: token.INT, Value: "2"},
+		}
+
+		assert.False(t, containsStringLit(inner))
 	})
 }
 

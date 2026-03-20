@@ -217,10 +217,11 @@ func findStringConcatenations(filePath string) []string {
 			return true
 		}
 
-		if isStringLit(binExpr.X) || isStringLit(binExpr.Y) {
+		if hasStringLit(binExpr) {
 			pos := fset.Position(binExpr.OpPos)
 			violations = append(violations,
 				fmt.Sprintf("  - %s:%d: string concatenation with '+'", filePath, pos.Line))
+			return false
 		}
 
 		return true
@@ -229,10 +230,20 @@ func findStringConcatenations(filePath string) []string {
 	return violations
 }
 
-func isStringLit(expr ast.Expr) bool {
-	lit, ok := expr.(*ast.BasicLit)
+func hasStringLit(binExpr *ast.BinaryExpr) bool {
+	return containsStringLit(binExpr.X) || containsStringLit(binExpr.Y)
+}
 
-	return ok && lit.Kind == token.STRING
+func containsStringLit(expr ast.Expr) bool {
+	if lit, ok := expr.(*ast.BasicLit); ok {
+		return lit.Kind == token.STRING
+	}
+
+	if inner, ok := expr.(*ast.BinaryExpr); ok && inner.Op == token.ADD {
+		return containsStringLit(inner.X) || containsStringLit(inner.Y)
+	}
+
+	return false
 }
 
 func checkStdlibWrappers() error {
