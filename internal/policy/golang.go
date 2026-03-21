@@ -23,6 +23,8 @@ const (
 	maxTestDuration           = 10 * time.Second
 	minFunctionLines          = 5
 	maxUncoveredFunctionLines = 25
+	maxFuncParams             = 5
+	maxFuncResults            = 5
 	skipDirective             = "//yake:skip-test"
 )
 
@@ -46,6 +48,10 @@ func RunGolangChecks() error {
 	}
 
 	if err := checkStdlibWrappers(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
+	if err := checkFuncSignature(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
 
@@ -473,6 +479,105 @@ func isParamForwarding(fn *ast.FuncDecl, call *ast.CallExpr) bool {
 	}
 
 	return usedParams == len(paramNames)
+}
+
+func checkFuncSignature() error {
+	log.Println("Checking function signature complexity...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findFuncSignatureViolations(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("function signature violations (use struct-based config):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findFuncSignatureViolations(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	if hasSkipDirective(filePath) {
+		return nil
+	}
+
+	var violations []string
+
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || hasFuncSkipDirective(fn) {
+			continue
+		}
+
+		paramCount := countFields(fn.Type.Params)
+		if paramCount > maxFuncParams {
+			pos := fset.Position(fn.Pos())
+			violations = append(violations,
+				fmt.Sprintf("  - %s:%d: function '%s' has %d parameters (maximum %d)",
+					filePath, pos.Line, fn.Name.Name, paramCount, maxFuncParams))
+		}
+
+		resultCount := countFields(fn.Type.Results)
+		if resultCount > maxFuncResults {
+			pos := fset.Position(fn.Pos())
+			violations = append(violations,
+				fmt.Sprintf("  - %s:%d: function '%s' has %d return values (maximum %d)",
+					filePath, pos.Line, fn.Name.Name, resultCount, maxFuncResults))
+		}
+	}
+
+	return violations
+}
+
+func countFields(fields *ast.FieldList) int {
+	if fields == nil {
+		return 0
+	}
+
+	count := 0
+
+	for _, field := range fields.List {
+		if len(field.Names) == 0 {
+			count++
+		} else {
+			count += len(field.Names)
+		}
+	}
+
+	return count
 }
 
 func checkPackageNaming() error {

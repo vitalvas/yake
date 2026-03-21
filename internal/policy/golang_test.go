@@ -2939,3 +2939,268 @@ func TestAdd(t *testing.T) {
 `
 	require.NoError(t, os.WriteFile(filepath.Join(calcDir, "calc_test.go"), []byte(testGo), 0644))
 }
+
+func Test_checkFuncSignature(t *testing.T) {
+	t.Run("passes with valid signatures", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+func doWork(a, b, c int, d string, e bool) (int, error) {
+	return 0, nil
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkFuncSignature()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects too many parameters", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+func doWork(a int, b int, c int, d string, e bool, f float64) int {
+	return 0
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkFuncSignature()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "function 'doWork' has 6 parameters (maximum 5)")
+	})
+
+	t.Run("detects too many return values", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+func doWork() (int, string, bool, error, float64, byte) {
+	return 0, "", false, nil, 0.0, 0
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkFuncSignature()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "function 'doWork' has 6 return values (maximum 5)")
+	})
+
+	t.Run("detects both violations", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+func doWork(a, b, c, d, e, f int) (int, string, bool, error, float64, byte) {
+	return 0, "", false, nil, 0.0, 0
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkFuncSignature()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "has 6 parameters")
+		assert.Contains(t, err.Error(), "has 6 return values")
+	})
+
+	t.Run("skips test files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+func doWork(a, b, c, d, e, f int) int {
+	return 0
+}
+`
+		require.NoError(t, os.WriteFile("main_test.go", []byte(code), 0644))
+
+		err := checkFuncSignature()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `//yake:skip-test
+package main
+
+func doWork(a, b, c, d, e, f int) int {
+	return 0
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkFuncSignature()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips with func skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := `package main
+
+//yake:skip-test
+func doWork(a, b, c, d, e, f int) int {
+	return 0
+}
+`
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkFuncSignature()
+
+		assert.NoError(t, err)
+	})
+}
+
+func Test_findFuncSignatureViolations(t *testing.T) {
+	t.Run("no violations", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+
+		code := `package main
+
+func doWork(a int) error {
+	return nil
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findFuncSignatureViolations(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("grouped params counted individually", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+
+		code := `package main
+
+func doWork(a, b, c, d, e, f int) error {
+	return nil
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findFuncSignatureViolations(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "has 6 parameters")
+	})
+
+	t.Run("unnamed return values counted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+
+		code := `package main
+
+func doWork() (int, string, bool, error, float64, byte) {
+	return 0, "", false, nil, 0.0, 0
+}
+`
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findFuncSignatureViolations(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "has 6 return values")
+	})
+
+	t.Run("invalid go file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "main.go")
+
+		require.NoError(t, os.WriteFile(path, []byte("not go code"), 0644))
+
+		violations := findFuncSignatureViolations(path)
+
+		assert.Empty(t, violations)
+	})
+}
+
+func Test_countFields(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields *ast.FieldList
+		want   int
+	}{
+		{
+			name:   "nil fields",
+			fields: nil,
+			want:   0,
+		},
+		{
+			name: "named fields",
+			fields: &ast.FieldList{
+				List: []*ast.Field{
+					{Names: []*ast.Ident{{Name: "a"}, {Name: "b"}}},
+					{Names: []*ast.Ident{{Name: "c"}}},
+				},
+			},
+			want: 3,
+		},
+		{
+			name: "unnamed fields",
+			fields: &ast.FieldList{
+				List: []*ast.Field{
+					{},
+					{},
+				},
+			},
+			want: 2,
+		},
+		{
+			name: "mixed fields",
+			fields: &ast.FieldList{
+				List: []*ast.Field{
+					{Names: []*ast.Ident{{Name: "a"}, {Name: "b"}}},
+					{},
+				},
+			},
+			want: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countFields(tt.fields)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
