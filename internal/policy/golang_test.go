@@ -3348,6 +3348,66 @@ func (o *Order) CustomerName() string { return "" }
 		assert.NoError(t, err)
 	})
 
+	t.Run("respects file skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`//yake:skip-test
+package customer
+
+func CustomerOrders() {}
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("respects function skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+//yake:skip-test
+func CustomerOrders() {}
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("respects type skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+//yake:skip-test
+type CustomerAddress struct{}
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+
 	t.Run("ignores main package", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()

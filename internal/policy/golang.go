@@ -723,13 +723,17 @@ func findStutteringViolations(filePath string) []string {
 
 	pkgUpper := strings.ToUpper(pkgName[:1]) + pkgName[1:]
 
+	if hasSkipDirective(filePath) {
+		return nil
+	}
+
 	var violations []string
 
 	for _, decl := range node.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			name := d.Name.Name
-			if !d.Name.IsExported() || d.Recv != nil {
+			if !d.Name.IsExported() || d.Recv != nil || hasFuncSkipDirective(d) {
 				continue
 			}
 
@@ -740,6 +744,10 @@ func findStutteringViolations(filePath string) []string {
 			}
 
 		case *ast.GenDecl:
+			if hasGenDeclSkipDirective(d) {
+				continue
+			}
+
 			for _, spec := range d.Specs {
 				switch s := spec.(type) {
 				case *ast.TypeSpec:
@@ -1156,6 +1164,20 @@ func hasFuncSkipDirective(fn *ast.FuncDecl) bool {
 	}
 
 	for _, comment := range fn.Doc.List {
+		if strings.HasPrefix(strings.TrimSpace(comment.Text), skipDirective) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasGenDeclSkipDirective(decl *ast.GenDecl) bool {
+	if decl.Doc == nil {
+		return false
+	}
+
+	for _, comment := range decl.Doc.List {
 		if strings.HasPrefix(strings.TrimSpace(comment.Text), skipDirective) {
 			return true
 		}
