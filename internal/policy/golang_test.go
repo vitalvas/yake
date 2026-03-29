@@ -3204,3 +3204,528 @@ func Test_countFields(t *testing.T) {
 		})
 	}
 }
+
+func Test_checkStuttering(t *testing.T) {
+	t.Run("detects stuttering function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+func CustomerOrders() {}
+`), 0644))
+
+		err := checkStuttering()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "customer.CustomerOrders")
+	})
+
+	t.Run("detects stuttering type", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+type CustomerAddress struct{}
+`), 0644))
+
+		err := checkStuttering()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "customer.CustomerAddress")
+	})
+
+	t.Run("detects stuttering var", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+var CustomerDefault = "none"
+`), 0644))
+
+		err := checkStuttering()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "customer.CustomerDefault")
+	})
+
+	t.Run("allows type matching package name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+type Customer struct{}
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows non-stuttering exported names", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+func New() {}
+
+type Address struct{}
+
+func Orders() {}
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("ignores unexported identifiers", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+func customerOrders() {}
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("ignores methods", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/customer", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/customer/customer.go", []byte(`package customer
+
+type Order struct{}
+
+func (o *Order) CustomerName() string { return "" }
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("ignores main package", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte(`package main
+
+func main() {}
+`), 0644))
+
+		err := checkStuttering()
+
+		assert.NoError(t, err)
+	})
+}
+
+func Test_isStutteringName(t *testing.T) {
+	tests := []struct {
+		name     string
+		ident    string
+		pkgUpper string
+		want     bool
+	}{
+		{name: "stutters", ident: "CustomerOrders", pkgUpper: "Customer", want: true},
+		{name: "stutters type", ident: "CustomerAddress", pkgUpper: "Customer", want: true},
+		{name: "exact match not stuttering", ident: "Customer", pkgUpper: "Customer", want: false},
+		{name: "no prefix match", ident: "New", pkgUpper: "Customer", want: false},
+		{name: "prefix but lowercase after", ident: "Customers", pkgUpper: "Customer", want: false},
+		{name: "http stutters", ident: "HttpServer", pkgUpper: "Http", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isStutteringName(tt.ident, tt.pkgUpper)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_checkGetterNaming(t *testing.T) {
+	t.Run("detects getter with Get prefix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/user", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/user/user.go", []byte(`package user
+
+type User struct {
+	name string
+}
+
+func (u *User) GetName() string {
+	return u.name
+}
+`), 0644))
+
+		err := checkGetterNaming()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "GetName")
+		assert.Contains(t, err.Error(), "Name")
+	})
+
+	t.Run("allows getter with parameters", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/user", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/user/user.go", []byte(`package user
+
+type User struct{}
+
+func (u *User) GetField(name string) string {
+	return ""
+}
+`), 0644))
+
+		err := checkGetterNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows getter with multiple return values", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/user", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/user/user.go", []byte(`package user
+
+type User struct{}
+
+func (u *User) GetName() (string, error) {
+	return "", nil
+}
+`), 0644))
+
+		err := checkGetterNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("ignores non-method functions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/user", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/user/user.go", []byte(`package user
+
+func GetDefault() string {
+	return ""
+}
+`), 0644))
+
+		err := checkGetterNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("ignores unexported methods", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/user", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/user/user.go", []byte(`package user
+
+type User struct{ name string }
+
+func (u *User) getName() string {
+	return u.name
+}
+`), 0644))
+
+		err := checkGetterNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("respects skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/user", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/user/user.go", []byte(`//yake:skip-test
+package user
+
+type User struct{ name string }
+
+func (u *User) GetName() string {
+	return u.name
+}
+`), 0644))
+
+		err := checkGetterNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("respects function skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/user", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/user/user.go", []byte(`package user
+
+type User struct{ name string }
+
+//yake:skip-test
+func (u *User) GetName() string {
+	return u.name
+}
+`), 0644))
+
+		err := checkGetterNaming()
+
+		assert.NoError(t, err)
+	})
+}
+
+func Test_checkInterfaceNaming(t *testing.T) {
+	t.Run("detects Interface suffix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/auth", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/auth/auth.go", []byte(`package auth
+
+type UserInterface interface {
+	Name() string
+}
+`), 0644))
+
+		err := checkInterfaceNaming()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "UserInterface")
+		assert.Contains(t, err.Error(), "User")
+	})
+
+	t.Run("detects single-method interface without er suffix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/auth", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/auth/auth.go", []byte(`package auth
+
+type Speak interface {
+	Speak() string
+}
+`), 0644))
+
+		err := checkInterfaceNaming()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Speak")
+		assert.Contains(t, err.Error(), "Speaker")
+	})
+
+	t.Run("allows single-method interface with er suffix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/auth", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/auth/auth.go", []byte(`package auth
+
+type Speaker interface {
+	Speak() string
+}
+`), 0644))
+
+		err := checkInterfaceNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows multi-method interface without er suffix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/auth", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/auth/auth.go", []byte(`package auth
+
+type Service interface {
+	Start() error
+	Stop() error
+}
+`), 0644))
+
+		err := checkInterfaceNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows empty interface", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/auth", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/auth/auth.go", []byte(`package auth
+
+type Any interface{}
+`), 0644))
+
+		err := checkInterfaceNaming()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects both violations in same file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/auth", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/auth/auth.go", []byte(`package auth
+
+type UserInterface interface {
+	Validate() error
+}
+
+type Authorize interface {
+	Authorize() error
+}
+`), 0644))
+
+		err := checkInterfaceNaming()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "UserInterface")
+		assert.Contains(t, err.Error(), "Authorize")
+	})
+}
+
+func Test_findStutteringViolations(t *testing.T) {
+	t.Run("returns nil for unparseable file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "bad.go")
+		require.NoError(t, os.WriteFile(path, []byte("not valid go"), 0644))
+
+		violations := findStutteringViolations(path)
+
+		assert.Nil(t, violations)
+	})
+}
+
+func Test_findGetterViolations(t *testing.T) {
+	t.Run("returns nil for unparseable file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "bad.go")
+		require.NoError(t, os.WriteFile(path, []byte("not valid go"), 0644))
+
+		violations := findGetterViolations(path)
+
+		assert.Nil(t, violations)
+	})
+}
+
+func Test_findInterfaceNamingViolations(t *testing.T) {
+	t.Run("returns nil for unparseable file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "bad.go")
+		require.NoError(t, os.WriteFile(path, []byte("not valid go"), 0644))
+
+		violations := findInterfaceNamingViolations(path)
+
+		assert.Nil(t, violations)
+	})
+}

@@ -55,6 +55,18 @@ func RunGolangChecks() error {
 		allErrors = append(allErrors, err.Error())
 	}
 
+	if err := checkStuttering(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
+	if err := checkGetterNaming(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
+	if err := checkInterfaceNaming(); err != nil {
+		allErrors = append(allErrors, err.Error())
+	}
+
 	if err := checkTestFileNaming(); err != nil {
 		allErrors = append(allErrors, err.Error())
 	}
@@ -653,6 +665,322 @@ func extractPackageName(filePath string) string {
 	}
 
 	return node.Name.Name
+}
+
+func checkStuttering() error {
+	log.Println("Checking for stuttering in exported identifiers...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findStutteringViolations(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("stuttering violations (exported names should not repeat the package name):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findStutteringViolations(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	pkgName := node.Name.Name
+	if pkgName == "main" {
+		return nil
+	}
+
+	pkgUpper := strings.ToUpper(pkgName[:1]) + pkgName[1:]
+
+	var violations []string
+
+	for _, decl := range node.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			name := d.Name.Name
+			if !d.Name.IsExported() || d.Recv != nil {
+				continue
+			}
+
+			if isStutteringName(name, pkgUpper) {
+				pos := fset.Position(d.Pos())
+				violations = append(violations,
+					fmt.Sprintf("  - %s:%d: function '%s.%s' stutters", filePath, pos.Line, pkgName, name))
+			}
+
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					name := s.Name.Name
+					if !s.Name.IsExported() {
+						continue
+					}
+
+					if strings.EqualFold(name, pkgName) {
+						continue
+					}
+
+					if isStutteringName(name, pkgUpper) {
+						pos := fset.Position(s.Pos())
+						violations = append(violations,
+							fmt.Sprintf("  - %s:%d: type '%s.%s' stutters", filePath, pos.Line, pkgName, name))
+					}
+
+				case *ast.ValueSpec:
+					for _, ident := range s.Names {
+						if !ident.IsExported() {
+							continue
+						}
+
+						if isStutteringName(ident.Name, pkgUpper) {
+							pos := fset.Position(ident.Pos())
+							violations = append(violations,
+								fmt.Sprintf("  - %s:%d: identifier '%s.%s' stutters", filePath, pos.Line, pkgName, ident.Name))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return violations
+}
+
+func isStutteringName(name, pkgUpper string) bool {
+	if !strings.HasPrefix(name, pkgUpper) {
+		return false
+	}
+
+	rest := name[len(pkgUpper):]
+	if len(rest) == 0 {
+		return false
+	}
+
+	return rest[0] >= 'A' && rest[0] <= 'Z'
+}
+
+func checkGetterNaming() error {
+	log.Println("Checking for Get prefix in getter methods...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findGetterViolations(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("getter naming violations (use Name() instead of GetName()):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findGetterViolations(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	if hasSkipDirective(filePath) {
+		return nil
+	}
+
+	var violations []string
+
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || hasFuncSkipDirective(fn) {
+			continue
+		}
+
+		name := fn.Name.Name
+		if !fn.Name.IsExported() || !strings.HasPrefix(name, "Get") || len(name) <= 3 {
+			continue
+		}
+
+		afterGet := name[3:]
+		if len(afterGet) == 0 || afterGet[0] < 'A' || afterGet[0] > 'Z' {
+			continue
+		}
+
+		paramCount := countFields(fn.Type.Params)
+		resultCount := countFields(fn.Type.Results)
+
+		if paramCount == 0 && resultCount == 1 {
+			pos := fset.Position(fn.Pos())
+			violations = append(violations,
+				fmt.Sprintf("  - %s:%d: method '%s' should be '%s'", filePath, pos.Line, name, afterGet))
+		}
+	}
+
+	return violations
+}
+
+func checkInterfaceNaming() error {
+	log.Println("Checking interface naming conventions...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findInterfaceNamingViolations(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("interface naming violations:\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findInterfaceNamingViolations(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	var violations []string
+
+	for _, decl := range node.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			ifaceType, ok := typeSpec.Type.(*ast.InterfaceType)
+			if !ok {
+				continue
+			}
+
+			name := typeSpec.Name.Name
+
+			if strings.HasSuffix(name, "Interface") {
+				pos := fset.Position(typeSpec.Pos())
+				trimmed := strings.TrimSuffix(name, "Interface")
+				violations = append(violations,
+					fmt.Sprintf("  - %s:%d: interface '%s' should not have 'Interface' suffix; consider '%s'",
+						filePath, pos.Line, name, trimmed))
+			}
+
+			if ifaceType.Methods == nil {
+				continue
+			}
+
+			methodCount := 0
+
+			var methodName string
+
+			for _, field := range ifaceType.Methods.List {
+				if _, ok := field.Type.(*ast.FuncType); ok {
+					methodCount++
+					if len(field.Names) > 0 {
+						methodName = field.Names[0].Name
+					}
+				}
+			}
+
+			if methodCount == 1 && methodName != "" && !strings.HasSuffix(name, "er") {
+				pos := fset.Position(typeSpec.Pos())
+				suggested := fmt.Sprintf("%ser", methodName)
+				violations = append(violations,
+					fmt.Sprintf("  - %s:%d: single-method interface '%s' should use '-er' suffix (e.g., '%s')",
+						filePath, pos.Line, name, suggested))
+			}
+		}
+	}
+
+	return violations
 }
 
 func checkTestFileNaming() error {
