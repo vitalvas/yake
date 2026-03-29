@@ -966,6 +966,7 @@ func findInterfaceNamingViolations(filePath string) []string {
 			}
 
 			methodCount := 0
+			embedCount := 0
 
 			var methodName string
 
@@ -975,10 +976,12 @@ func findInterfaceNamingViolations(filePath string) []string {
 					if len(field.Names) > 0 {
 						methodName = field.Names[0].Name
 					}
+				} else {
+					embedCount++
 				}
 			}
 
-			if methodCount == 1 && methodName != "" && !strings.HasSuffix(name, "er") {
+			if methodCount == 1 && embedCount == 0 && methodName != "" && !strings.HasSuffix(name, "er") {
 				pos := fset.Position(typeSpec.Pos())
 				suggested := fmt.Sprintf("%ser", methodName)
 				violations = append(violations,

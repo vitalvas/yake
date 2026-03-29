@@ -3707,6 +3707,30 @@ type Service interface {
 		assert.NoError(t, err)
 	})
 
+	t.Run("allows single-method interface with embedded interface", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/auth", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/auth/auth.go", []byte(`package auth
+
+import "net"
+
+type TLSConn interface {
+	net.Conn
+	ConnectionState() string
+}
+`), 0644))
+
+		err := checkInterfaceNaming()
+
+		assert.NoError(t, err)
+	})
+
 	t.Run("allows empty interface", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
