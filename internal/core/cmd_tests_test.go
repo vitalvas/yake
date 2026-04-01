@@ -92,13 +92,31 @@ func Test_runGoreleaserCheck(t *testing.T) {
 	})
 }
 
+func Test_runRustTests(t *testing.T) {
+	t.Run("returns error when cargo is not available", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", tmpDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runRustTests()
+
+		assert.Error(t, err)
+	})
+}
+
 func TestCreateTestsCommand(t *testing.T) {
 	t.Run("returns valid command", func(t *testing.T) {
 		cmd := createTestsCommand()
 
 		require.NotNil(t, cmd)
 		assert.Equal(t, "tests", cmd.Use)
-		assert.Equal(t, "Run Go tests with coverage, race detection, and linting", cmd.Short)
+		assert.Equal(t, "Run tests with coverage, race detection, and linting", cmd.Short)
 		assert.NotNil(t, cmd.RunE)
 	})
 

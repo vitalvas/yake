@@ -12,10 +12,16 @@ import (
 func createTestsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tests",
-		Short: "Run Go tests with coverage, race detection, and linting",
+		Short: "Run tests with coverage, race detection, and linting",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if _, err := os.Stat("go.mod"); err == nil {
 				if err := runGoTests(); err != nil {
+					return err
+				}
+			}
+
+			if _, err := os.Stat("Cargo.toml"); err == nil {
+				if err := runRustTests(); err != nil {
 					return err
 				}
 			}
@@ -70,6 +76,22 @@ func runCommand(name string, args ...string) error {
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run %s: %w", append([]string{name}, args...), err)
+	}
+
+	return nil
+}
+
+func runRustTests() error {
+	commands := []command{
+		{name: "cargo", args: []string{"fmt", "--check"}},
+		{name: "cargo", args: []string{"clippy", "--", "-D", "warnings"}},
+		{name: "cargo", args: []string{"test"}},
+	}
+
+	for _, cmdInfo := range commands {
+		if err := runCommand(cmdInfo.name, cmdInfo.args...); err != nil {
+			return err
+		}
 	}
 
 	return nil
