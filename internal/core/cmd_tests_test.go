@@ -111,34 +111,9 @@ func Test_runRustTests(t *testing.T) {
 }
 
 func TestCreateTestsCommand(t *testing.T) {
-	t.Run("returns valid command", func(t *testing.T) {
-		cmd := createTestsCommand()
+	assertCommandBehavior(t, createTestsCommand, "tests", "Run tests with coverage, race detection, and linting")
 
-		require.NotNil(t, cmd)
-		assert.Equal(t, "tests", cmd.Use)
-		assert.Equal(t, "Run tests with coverage, race detection, and linting", cmd.Short)
-		assert.NotNil(t, cmd.RunE)
-	})
-
-	t.Run("command is executable", func(t *testing.T) {
-		cmd := createTestsCommand()
-
-		assert.True(t, cmd.Runnable())
-	})
-
-	t.Run("returns nil when no go.mod exists", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-
-		os.Chdir(tmpDir)
-
-		cmd := createTestsCommand()
-		err := cmd.RunE(cmd, nil)
-		assert.NoError(t, err)
-	})
-
-	t.Run("runs successfully with go.mod", func(t *testing.T) {
+	t.Run("returns error when go tests fail", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
@@ -146,10 +121,10 @@ func TestCreateTestsCommand(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
-		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() { invalid }\n"), 0644))
 
 		cmd := createTestsCommand()
 		err := cmd.RunE(cmd, nil)
-		assert.NoError(t, err)
+		assert.Error(t, err)
 	})
 }

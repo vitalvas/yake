@@ -27,6 +27,7 @@ func Execute() {
 	}
 
 	rootCmd.AddCommand(codeCmd)
+	rootCmd.AddCommand(createRunCommand())
 	rootCmd.AddCommand(createTestsCommand())
 	rootCmd.AddCommand(createPolicyCommand())
 	rootCmd.AddCommand(createGitCommand())
