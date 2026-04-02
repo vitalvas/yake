@@ -43,7 +43,7 @@ func Test_checkEntryPoints(t *testing.T) {
 
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		assert.NoError(t, err)
 	})
@@ -58,7 +58,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.MkdirAll("cmd/app1", 0755))
 		require.NoError(t, os.WriteFile("cmd/app1/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		assert.NoError(t, err)
 	})
@@ -73,7 +73,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.MkdirAll("cmd/tools/migrate", 0755))
 		require.NoError(t, os.WriteFile("cmd/tools/migrate/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		assert.NoError(t, err)
 	})
@@ -88,7 +88,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/pkg", 0755))
 		require.NoError(t, os.WriteFile("internal/pkg/lib.go", []byte("package pkg\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		assert.NoError(t, err)
 	})
@@ -104,7 +104,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.MkdirAll("cmd/app1", 0755))
 		require.NoError(t, os.WriteFile("cmd/app1/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "entry point violation")
@@ -121,7 +121,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.MkdirAll("cmd/tools/migrate", 0755))
 		require.NoError(t, os.WriteFile("cmd/tools/migrate/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "entry point violation")
@@ -137,7 +137,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 		require.NoError(t, os.WriteFile("version.go", []byte("package main\n\nvar version = \"dev\"\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "version.go")
@@ -155,7 +155,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.WriteFile("cmd/app/main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 		require.NoError(t, os.WriteFile("cmd/app/config.go", []byte("package main\n\nvar cfg = \"default\"\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cmd/app/config.go")
@@ -173,7 +173,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 		require.NoError(t, os.WriteFile("internal/pkg/lib.go", []byte("package pkg\n\nvar x = 1\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		assert.NoError(t, err)
 	})
@@ -188,7 +188,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 		require.NoError(t, os.WriteFile("main_test.go", []byte("package main\n\nimport \"testing\"\n\nfunc TestMain(t *testing.T) {}\n"), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "main_test.go")
@@ -205,7 +205,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		content := "package main\n\nfunc main() {}\n\nfunc helper() {}\n"
 		require.NoError(t, os.WriteFile("main.go", []byte(content), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected function 'helper'")
@@ -221,7 +221,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		content := "package main\n\nfunc init() {}\n\nfunc main() {}\n"
 		require.NoError(t, os.WriteFile("main.go", []byte(content), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected function 'init'")
@@ -243,7 +243,7 @@ func Test_checkEntryPoints(t *testing.T) {
 
 		require.NoError(t, os.WriteFile("main.go", []byte(strings.Join(lines, "\n")), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "main() is 30 lines")
@@ -260,7 +260,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		content := "package main\n\nfunc main() {}\n\nfunc run() {}\n"
 		require.NoError(t, os.WriteFile("cmd/app1/main.go", []byte(content), 0644))
 
-		err := checkEntryPoints()
+		err := checkEntryPoints(defaultMaxMainLines)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unexpected function 'run'")
@@ -274,7 +274,7 @@ func Test_validateMainFiles(t *testing.T) {
 		path := filepath.Join(tmpDir, "main.go")
 		require.NoError(t, os.WriteFile(path, []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		violations := validateMainFiles([]string{path})
+		violations := validateMainFiles([]string{path}, defaultMaxMainLines)
 
 		assert.Empty(t, violations)
 	})
@@ -285,7 +285,7 @@ func Test_validateMainFiles(t *testing.T) {
 		content := "package main\n\nfunc main() {}\n\nfunc setup() {}\n"
 		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 
-		violations := validateMainFiles([]string{path})
+		violations := validateMainFiles([]string{path}, defaultMaxMainLines)
 
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "unexpected function 'setup'")
@@ -297,7 +297,7 @@ func Test_validateMainFiles(t *testing.T) {
 		content := "package main\n\nfunc init() {}\n\nfunc main() {}\n"
 		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 
-		violations := validateMainFiles([]string{path})
+		violations := validateMainFiles([]string{path}, defaultMaxMainLines)
 
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "unexpected function 'init'")
@@ -316,11 +316,11 @@ func Test_validateMainFiles(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644))
 
-		violations := validateMainFiles([]string{path})
+		violations := validateMainFiles([]string{path}, defaultMaxMainLines)
 
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "main() is 30 lines")
-		assert.Contains(t, violations[0], fmt.Sprintf("maximum %d", maxUncoveredFunctionLines))
+		assert.Contains(t, violations[0], fmt.Sprintf("maximum %d", defaultMaxUncoveredFuncLines))
 	})
 
 	t.Run("allows main within max lines", func(t *testing.T) {
@@ -336,7 +336,7 @@ func Test_validateMainFiles(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644))
 
-		violations := validateMainFiles([]string{path})
+		violations := validateMainFiles([]string{path}, defaultMaxMainLines)
 
 		assert.Empty(t, violations)
 	})
@@ -347,7 +347,7 @@ func Test_validateMainFiles(t *testing.T) {
 		content := "package main\n\nfunc init() {}\n\nfunc main() {}\n\nfunc helper() {}\n"
 		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 
-		violations := validateMainFiles([]string{path})
+		violations := validateMainFiles([]string{path}, defaultMaxMainLines)
 
 		assert.Len(t, violations, 2)
 	})
@@ -357,14 +357,14 @@ func Test_validateMainFiles(t *testing.T) {
 		path := filepath.Join(tmpDir, "main.go")
 		require.NoError(t, os.WriteFile(path, []byte("package main\n"), 0644))
 
-		violations := validateMainFiles([]string{path})
+		violations := validateMainFiles([]string{path}, defaultMaxMainLines)
 
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "missing main()")
 	})
 
 	t.Run("empty paths returns no violations", func(t *testing.T) {
-		violations := validateMainFiles(nil)
+		violations := validateMainFiles(nil, defaultMaxMainLines)
 
 		assert.Empty(t, violations)
 	})
@@ -1690,7 +1690,7 @@ func Test_largeFunctions(t *testing.T) {
 		code := fmt.Sprintf("package main\n\n%s", generateLargeFunc("ProcessData", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
-		result := largeFunctions(filePath)
+		result := largeFunctions(filePath, defaultMaxUncoveredFuncLines)
 		require.Len(t, result, 1)
 		assert.Equal(t, "ProcessData", result[0].Name)
 		assert.Equal(t, 30, result[0].Lines)
@@ -1705,7 +1705,7 @@ func Test_largeFunctions(t *testing.T) {
 		code := fmt.Sprintf("package main\n\n%s", generateLargeFunc("SmallFunc", 25))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
-		result := largeFunctions(filePath)
+		result := largeFunctions(filePath, defaultMaxUncoveredFuncLines)
 		assert.Empty(t, result)
 	})
 
@@ -1716,7 +1716,7 @@ func Test_largeFunctions(t *testing.T) {
 		code := fmt.Sprintf("package main\n\ntype Service struct{}\n\n%s", generateLargeMethod("Service", "Handle", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
-		result := largeFunctions(filePath)
+		result := largeFunctions(filePath, defaultMaxUncoveredFuncLines)
 		require.Len(t, result, 1)
 		assert.Equal(t, "Service_Handle", result[0].Name)
 		assert.Equal(t, 30, result[0].Lines)
@@ -1729,7 +1729,7 @@ func Test_largeFunctions(t *testing.T) {
 		code := fmt.Sprintf("package main\n\n%s\n%s", generateLargeFunc("FuncA", 30), generateLargeFunc("FuncB", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
-		result := largeFunctions(filePath)
+		result := largeFunctions(filePath, defaultMaxUncoveredFuncLines)
 		require.Len(t, result, 2)
 		assert.Equal(t, "FuncA", result[0].Name)
 		assert.Equal(t, "FuncB", result[1].Name)
@@ -1742,13 +1742,13 @@ func Test_largeFunctions(t *testing.T) {
 		code := fmt.Sprintf("package main\n\n//yake:skip-test\n%s\n%s", generateLargeFunc("SkippedFunc", 30), generateLargeFunc("IncludedFunc", 30))
 		require.NoError(t, os.WriteFile(filePath, []byte(code), 0644))
 
-		result := largeFunctions(filePath)
+		result := largeFunctions(filePath, defaultMaxUncoveredFuncLines)
 		require.Len(t, result, 1)
 		assert.Equal(t, "IncludedFunc", result[0].Name)
 	})
 
 	t.Run("returns nil for non-existent file", func(t *testing.T) {
-		result := largeFunctions("/non/existent/file.go")
+		result := largeFunctions("/non/existent/file.go", defaultMaxUncoveredFuncLines)
 		assert.Nil(t, result)
 	})
 }
@@ -1866,7 +1866,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "BigProcess")
@@ -1892,7 +1892,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -1914,7 +1914,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -1936,7 +1936,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -1958,7 +1958,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -1969,7 +1969,7 @@ func Test_parseTestDurationOutput(t *testing.T) {
 		data := `{"Action":"pass","Package":"github.com/example/pkg1","Elapsed":2.5}
 {"Action":"pass","Package":"github.com/example/pkg2","Elapsed":5.0}
 `
-		violations := parseTestDurationOutput([]byte(data))
+		violations := parseTestDurationOutput([]byte(data), defaultMaxTestDuration)
 		assert.Empty(t, violations)
 	})
 
@@ -1977,7 +1977,7 @@ func Test_parseTestDurationOutput(t *testing.T) {
 		data := `{"Action":"pass","Package":"github.com/example/fast","Elapsed":1.0}
 {"Action":"pass","Package":"github.com/example/slow","Elapsed":15.0}
 `
-		violations := parseTestDurationOutput([]byte(data))
+		violations := parseTestDurationOutput([]byte(data), defaultMaxTestDuration)
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "github.com/example/slow")
 	})
@@ -1985,7 +1985,7 @@ func Test_parseTestDurationOutput(t *testing.T) {
 	t.Run("detects failed package exceeding duration", func(t *testing.T) {
 		data := `{"Action":"fail","Package":"github.com/example/slow","Elapsed":12.0}
 `
-		violations := parseTestDurationOutput([]byte(data))
+		violations := parseTestDurationOutput([]byte(data), defaultMaxTestDuration)
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "github.com/example/slow")
 	})
@@ -1995,12 +1995,12 @@ func Test_parseTestDurationOutput(t *testing.T) {
 {"Action":"output","Package":"github.com/example/pkg","Output":"ok\n"}
 {"Action":"pass","Package":"github.com/example/pkg","Elapsed":2.0}
 `
-		violations := parseTestDurationOutput([]byte(data))
+		violations := parseTestDurationOutput([]byte(data), defaultMaxTestDuration)
 		assert.Empty(t, violations)
 	})
 
 	t.Run("handles empty input", func(t *testing.T) {
-		violations := parseTestDurationOutput([]byte{})
+		violations := parseTestDurationOutput([]byte{}, defaultMaxTestDuration)
 		assert.Empty(t, violations)
 	})
 
@@ -2008,14 +2008,14 @@ func Test_parseTestDurationOutput(t *testing.T) {
 		data := `not json
 {"Action":"pass","Package":"github.com/example/pkg","Elapsed":2.0}
 `
-		violations := parseTestDurationOutput([]byte(data))
+		violations := parseTestDurationOutput([]byte(data), defaultMaxTestDuration)
 		assert.Empty(t, violations)
 	})
 
 	t.Run("detects exactly at boundary", func(t *testing.T) {
 		data := `{"Action":"pass","Package":"github.com/example/pkg","Elapsed":10.0}
 `
-		violations := parseTestDurationOutput([]byte(data))
+		violations := parseTestDurationOutput([]byte(data), defaultMaxTestDuration)
 		assert.Empty(t, violations)
 	})
 
@@ -2023,7 +2023,7 @@ func Test_parseTestDurationOutput(t *testing.T) {
 		data := `{"Action":"pass","Package":"github.com/example/slow1","Elapsed":11.0}
 {"Action":"pass","Package":"github.com/example/slow2","Elapsed":20.0}
 `
-		violations := parseTestDurationOutput([]byte(data))
+		violations := parseTestDurationOutput([]byte(data), defaultMaxTestDuration)
 		assert.Len(t, violations, 2)
 	})
 }
@@ -2032,7 +2032,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("parses coverage above threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 85.0% of statements"
 
-		violations, err := parseCoverageOutput(output, "")
+		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -2041,7 +2041,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("detects coverage below threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 50.0% of statements"
 
-		violations, err := parseCoverageOutput(output, "")
+		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -2052,7 +2052,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("detects no test files", func(t *testing.T) {
 		output := "?\tgithub.com/example/nopkg\t[no test files]"
 
-		violations, err := parseCoverageOutput(output, "")
+		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -2066,14 +2066,14 @@ ok  	github.com/example/pkg2	0.003s	coverage: 75.0% of statements
 ?	github.com/example/pkg3	[no test files]
 ok  	github.com/example/pkg4	0.002s	coverage: 100.0% of statements`
 
-		violations, err := parseCoverageOutput(output, "")
+		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
 
 		require.NoError(t, err)
 		assert.Len(t, violations, 2)
 	})
 
 	t.Run("handles empty output", func(t *testing.T) {
-		violations, err := parseCoverageOutput("", "")
+		violations, err := parseCoverageOutput("", "", defaultMinCoverage)
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -2082,7 +2082,7 @@ ok  	github.com/example/pkg4	0.002s	coverage: 100.0% of statements`
 	t.Run("handles cached coverage output", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t(cached)\tcoverage: 75.0% of statements"
 
-		violations, err := parseCoverageOutput(output, "")
+		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -2111,7 +2111,7 @@ var FS embed.FS
 
 		os.Chdir(tmpDir)
 
-		violations, err := parseCoverageOutput(output, modulePath)
+		violations, err := parseCoverageOutput(output, modulePath, defaultMinCoverage)
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -2145,7 +2145,7 @@ func LargeFunction() string {
 
 		os.Chdir(tmpDir)
 
-		violations, err := parseCoverageOutput(output, modulePath)
+		violations, err := parseCoverageOutput(output, modulePath, defaultMinCoverage)
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -2508,7 +2508,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/service", 0755))
 		require.NoError(t, os.WriteFile("internal/service/handler.go", []byte("package service\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2522,7 +2522,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/api2", 0755))
 		require.NoError(t, os.WriteFile("internal/api2/handler.go", []byte("package api2\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2536,7 +2536,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/db", 0755))
 		require.NoError(t, os.WriteFile("internal/db/store.go", []byte("package db\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match")
 	})
@@ -2551,7 +2551,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/myService", 0755))
 		require.NoError(t, os.WriteFile("internal/myService/handler.go", []byte("package myService\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match")
 	})
@@ -2566,7 +2566,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/my_service", 0755))
 		require.NoError(t, os.WriteFile("internal/my_service/handler.go", []byte("package my_service\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match")
 	})
@@ -2582,7 +2582,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		// Go doesn't allow hyphens in package names, so this uses underscore in package but hyphen in dir
 		require.NoError(t, os.WriteFile("internal/myservice/handler.go", []byte("package my_service\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match")
 	})
@@ -2598,7 +2598,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join("internal", longName), 0755))
 		require.NoError(t, os.WriteFile(filepath.Join("internal", longName, "handler.go"), fmt.Appendf(nil, "package %s\n", longName), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match")
 	})
@@ -2613,7 +2613,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/handler", 0755))
 		require.NoError(t, os.WriteFile("internal/handler/handler.go", []byte("package service\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match directory name 'handler'")
 	})
@@ -2627,7 +2627,7 @@ func Test_checkPackageNaming(t *testing.T) {
 
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2642,7 +2642,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.WriteFile("internal/service/handler.go", []byte("package service\n"), 0644))
 		require.NoError(t, os.WriteFile("internal/service/handler_test.go", []byte("package service_test\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2656,7 +2656,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("vendor/badpkg", 0755))
 		require.NoError(t, os.WriteFile("vendor/badpkg/file.go", []byte("package BADPKG\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2670,7 +2670,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/proto", 0755))
 		require.NoError(t, os.WriteFile("internal/proto/message.pb.go", []byte("package proto\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2684,7 +2684,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("internal/api", 0755))
 		require.NoError(t, os.WriteFile("internal/api/handler.go", []byte("package api\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2699,7 +2699,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join("internal", name32), 0755))
 		require.NoError(t, os.WriteFile(filepath.Join("internal", name32, "handler.go"), fmt.Appendf(nil, "package %s\n", name32), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2714,7 +2714,7 @@ func Test_checkPackageNaming(t *testing.T) {
 
 		os.Chdir(pkgDir)
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 
@@ -2729,7 +2729,7 @@ func Test_checkPackageNaming(t *testing.T) {
 
 		os.Chdir(pkgDir)
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match directory name 'wrongname'")
 	})
@@ -2744,7 +2744,7 @@ func Test_checkPackageNaming(t *testing.T) {
 		require.NoError(t, os.MkdirAll("examples/demo", 0755))
 		require.NoError(t, os.WriteFile("examples/demo/main.go", []byte("package AB\n"), 0644))
 
-		err := checkPackageNaming()
+		err := checkPackageNaming(defaultPackageNamingPattern)
 		assert.NoError(t, err)
 	})
 }
@@ -2788,7 +2788,7 @@ func Test_checkCoverage(t *testing.T) {
 
 		createTestGoProject(t, tmpDir, 100)
 
-		err := checkCoverage()
+		err := checkCoverage(defaultMinCoverage, defaultMaxUncoveredFuncLines)
 		assert.NoError(t, err)
 	})
 
@@ -2801,7 +2801,7 @@ func Test_checkCoverage(t *testing.T) {
 
 		createTestGoProject(t, tmpDir, 50)
 
-		err := checkCoverage()
+		err := checkCoverage(defaultMinCoverage, defaultMaxUncoveredFuncLines)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "coverage violations")
 	})
@@ -2815,7 +2815,7 @@ func Test_checkCoverage(t *testing.T) {
 
 		createTestGoProjectWithLargeFunc(t, tmpDir)
 
-		err := checkCoverage()
+		err := checkCoverage(defaultMinCoverage, defaultMaxUncoveredFuncLines)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no test coverage")
 		assert.Contains(t, err.Error(), "BigUntested")
@@ -2956,7 +2956,7 @@ func doWork(a, b, c int, d string, e bool) (int, error) {
 `
 		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
 
-		err := checkFuncSignature()
+		err := checkFuncSignature(defaultMaxFuncParams, defaultMaxFuncResults)
 
 		assert.NoError(t, err)
 	})
@@ -2976,7 +2976,7 @@ func doWork(a int, b int, c int, d string, e bool, f float64) int {
 `
 		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
 
-		err := checkFuncSignature()
+		err := checkFuncSignature(defaultMaxFuncParams, defaultMaxFuncResults)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "function 'doWork' has 6 parameters (maximum 5)")
@@ -2997,7 +2997,7 @@ func doWork() (int, string, bool, error, float64, byte) {
 `
 		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
 
-		err := checkFuncSignature()
+		err := checkFuncSignature(defaultMaxFuncParams, defaultMaxFuncResults)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "function 'doWork' has 6 return values (maximum 5)")
@@ -3018,7 +3018,7 @@ func doWork(a, b, c, d, e, f int) (int, string, bool, error, float64, byte) {
 `
 		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
 
-		err := checkFuncSignature()
+		err := checkFuncSignature(defaultMaxFuncParams, defaultMaxFuncResults)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "has 6 parameters")
@@ -3040,7 +3040,7 @@ func doWork(a, b, c, d, e, f int) int {
 `
 		require.NoError(t, os.WriteFile("main_test.go", []byte(code), 0644))
 
-		err := checkFuncSignature()
+		err := checkFuncSignature(defaultMaxFuncParams, defaultMaxFuncResults)
 
 		assert.NoError(t, err)
 	})
@@ -3061,7 +3061,7 @@ func doWork(a, b, c, d, e, f int) int {
 `
 		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
 
-		err := checkFuncSignature()
+		err := checkFuncSignature(defaultMaxFuncParams, defaultMaxFuncResults)
 
 		assert.NoError(t, err)
 	})
@@ -3082,7 +3082,7 @@ func doWork(a, b, c, d, e, f int) int {
 `
 		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
 
-		err := checkFuncSignature()
+		err := checkFuncSignature(defaultMaxFuncParams, defaultMaxFuncResults)
 
 		assert.NoError(t, err)
 	})
@@ -3101,7 +3101,7 @@ func doWork(a int) error {
 `
 		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
 
-		violations := findFuncSignatureViolations(path)
+		violations := findFuncSignatureViolations(path, defaultMaxFuncParams, defaultMaxFuncResults)
 
 		assert.Empty(t, violations)
 	})
@@ -3118,7 +3118,7 @@ func doWork(a, b, c, d, e, f int) error {
 `
 		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
 
-		violations := findFuncSignatureViolations(path)
+		violations := findFuncSignatureViolations(path, defaultMaxFuncParams, defaultMaxFuncResults)
 
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "has 6 parameters")
@@ -3136,7 +3136,7 @@ func doWork() (int, string, bool, error, float64, byte) {
 `
 		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
 
-		violations := findFuncSignatureViolations(path)
+		violations := findFuncSignatureViolations(path, defaultMaxFuncParams, defaultMaxFuncResults)
 
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "has 6 return values")
@@ -3148,7 +3148,7 @@ func doWork() (int, string, bool, error, float64, byte) {
 
 		require.NoError(t, os.WriteFile(path, []byte("not go code"), 0644))
 
-		violations := findFuncSignatureViolations(path)
+		violations := findFuncSignatureViolations(path, defaultMaxFuncParams, defaultMaxFuncResults)
 
 		assert.Empty(t, violations)
 	})

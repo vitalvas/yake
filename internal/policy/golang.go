@@ -19,64 +19,85 @@ import (
 )
 
 const (
-	MinCoveragePercent        = 80.0
-	maxTestDuration           = 10 * time.Second
-	minFunctionLines          = 5
-	maxUncoveredFunctionLines = 25
-	maxFuncParams             = 5
-	maxFuncResults            = 5
-	skipDirective             = "//yake:skip-test"
+	MinCoveragePercent = 80.0
+	minFunctionLines   = 5
+	skipDirective      = "//yake:skip-test"
 )
-
-var packageNameRegex = regexp.MustCompile(`^[0-9a-z]{3,32}$`)
 
 func RunGolangChecks() error {
 	log.Println("Running Go policy checks...")
 
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
 	var allErrors []string
 
-	if err := checkEntryPoints(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.EntryPoints.isEnabled() {
+		if err := checkEntryPoints(cfg.Policy.EntryPoints.getMaxMainLines()); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkPackageNaming(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.PackageNaming.isEnabled() {
+		if err := checkPackageNaming(cfg.Policy.PackageNaming.getPattern()); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkStringConcat(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.StringConcat.isEnabled() {
+		if err := checkStringConcat(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkStdlibWrappers(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.StdlibWrappers.isEnabled() {
+		if err := checkStdlibWrappers(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkFuncSignature(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.FuncSignature.isEnabled() {
+		if err := checkFuncSignature(cfg.Policy.FuncSignature.getMaxParams(), cfg.Policy.FuncSignature.getMaxResults()); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkStuttering(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.Stuttering.isEnabled() {
+		if err := checkStuttering(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkGetterNaming(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.GetterNaming.isEnabled() {
+		if err := checkGetterNaming(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkInterfaceNaming(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.InterfaceNaming.isEnabled() {
+		if err := checkInterfaceNaming(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkTestFileNaming(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.TestFileNaming.isEnabled() {
+		if err := checkTestFileNaming(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkTestDuration(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.TestDuration.isEnabled() {
+		if err := checkTestDuration(cfg.Policy.TestDuration.getMaxDuration()); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
-	if err := checkCoverage(); err != nil {
-		allErrors = append(allErrors, err.Error())
+	if cfg.Policy.Coverage.isEnabled() {
+		if err := checkCoverage(cfg.Policy.Coverage.getMinCoverage(), cfg.Policy.Coverage.getMaxUncoveredFuncLines()); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
 	}
 
 	if len(allErrors) > 0 {
@@ -86,7 +107,7 @@ func RunGolangChecks() error {
 	return nil
 }
 
-func checkEntryPoints() error {
+func checkEntryPoints(maxMainLines int) error {
 	log.Println("Checking entry point layout (root main.go vs cmd/**/main.go)...")
 
 	hasRootMain := false
@@ -121,7 +142,7 @@ func checkEntryPoints() error {
 
 	mainFiles = append(mainFiles, cmdMains...)
 
-	violations := validateMainFiles(mainFiles)
+	violations := validateMainFiles(mainFiles, maxMainLines)
 
 	nonMainViolations := findNonMainEntryPoints()
 	violations = append(violations, nonMainViolations...)
@@ -169,7 +190,7 @@ func findNonMainEntryPoints() []string {
 	return violations
 }
 
-func validateMainFiles(paths []string) []string {
+func validateMainFiles(paths []string, maxMainLines int) []string {
 	var violations []string
 
 	for _, path := range paths {
@@ -194,10 +215,10 @@ func validateMainFiles(paths []string) []string {
 				if fn.Body != nil {
 					lines := countCodeLines(fset, path, fn.Body.Lbrace, fn.Body.Rbrace)
 
-					if lines > maxUncoveredFunctionLines {
+					if lines > maxMainLines {
 						violations = append(violations,
 							fmt.Sprintf("  - %s: main() is %d lines (maximum %d); move logic to internal/ or pkg/",
-								path, lines, maxUncoveredFunctionLines))
+								path, lines, maxMainLines))
 					}
 				}
 
@@ -493,7 +514,7 @@ func isParamForwarding(fn *ast.FuncDecl, call *ast.CallExpr) bool {
 	return usedParams == len(paramNames)
 }
 
-func checkFuncSignature() error {
+func checkFuncSignature(maxParams, maxResults int) error {
 	log.Println("Checking function signature complexity...")
 
 	var violations []string
@@ -516,7 +537,7 @@ func checkFuncSignature() error {
 			return nil
 		}
 
-		fileViolations := findFuncSignatureViolations(path)
+		fileViolations := findFuncSignatureViolations(path, maxParams, maxResults)
 		violations = append(violations, fileViolations...)
 
 		return nil
@@ -534,7 +555,7 @@ func checkFuncSignature() error {
 	return nil
 }
 
-func findFuncSignatureViolations(filePath string) []string {
+func findFuncSignatureViolations(filePath string, maxParams, maxResults int) []string {
 	fset := token.NewFileSet()
 
 	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
@@ -555,19 +576,19 @@ func findFuncSignatureViolations(filePath string) []string {
 		}
 
 		paramCount := countFields(fn.Type.Params)
-		if paramCount > maxFuncParams {
+		if paramCount > maxParams {
 			pos := fset.Position(fn.Pos())
 			violations = append(violations,
 				fmt.Sprintf("  - %s:%d: function '%s' has %d parameters (maximum %d)",
-					filePath, pos.Line, fn.Name.Name, paramCount, maxFuncParams))
+					filePath, pos.Line, fn.Name.Name, paramCount, maxParams))
 		}
 
 		resultCount := countFields(fn.Type.Results)
-		if resultCount > maxFuncResults {
+		if resultCount > maxResults {
 			pos := fset.Position(fn.Pos())
 			violations = append(violations,
 				fmt.Sprintf("  - %s:%d: function '%s' has %d return values (maximum %d)",
-					filePath, pos.Line, fn.Name.Name, resultCount, maxFuncResults))
+					filePath, pos.Line, fn.Name.Name, resultCount, maxResults))
 		}
 	}
 
@@ -592,8 +613,10 @@ func countFields(fields *ast.FieldList) int {
 	return count
 }
 
-func checkPackageNaming() error {
+func checkPackageNaming(pattern string) error {
 	log.Println("Checking package naming conventions...")
+
+	pkgNameRegex := regexp.MustCompile(pattern)
 
 	absRoot, err := filepath.Abs(".")
 	if err != nil {
@@ -627,9 +650,9 @@ func checkPackageNaming() error {
 			return nil
 		}
 
-		if !packageNameRegex.MatchString(pkgName) {
+		if !pkgNameRegex.MatchString(pkgName) {
 			violations = append(violations,
-				fmt.Sprintf("  - %s: package name '%s' does not match '^[0-9a-z]{3,32}$'", path, pkgName))
+				fmt.Sprintf("  - %s: package name '%s' does not match '%s'", path, pkgName, pattern))
 		}
 
 		dirName := filepath.Base(filepath.Dir(path))
@@ -1049,6 +1072,10 @@ func checkTestFileNaming() error {
 }
 
 func validateTestFileName(testPath string) []string {
+	if hasSkipDirective(testPath) {
+		return nil
+	}
+
 	if !hasFunctions(testPath) {
 		return nil
 	}
@@ -1282,7 +1309,7 @@ type coverBlock struct {
 	Count     int
 }
 
-func largeFunctions(filePath string) []funcInfo {
+func largeFunctions(filePath string, maxUncoveredFuncLines int) []funcInfo {
 	fset := token.NewFileSet()
 
 	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
@@ -1302,7 +1329,7 @@ func largeFunctions(filePath string) []funcInfo {
 		endLine := fset.Position(fn.Body.Rbrace).Line
 		lines := countCodeLines(fset, filePath, fn.Body.Lbrace, fn.Body.Rbrace)
 
-		if lines <= maxUncoveredFunctionLines {
+		if lines <= maxUncoveredFuncLines {
 			continue
 		}
 
@@ -1403,7 +1430,7 @@ func isFuncCovered(blocks []coverBlock, fn funcInfo) bool {
 	return false
 }
 
-func findUncoveredLargeFunctions(profilePath string) ([]string, error) {
+func findUncoveredLargeFunctions(profilePath string, maxUncoveredFuncLines int) ([]string, error) {
 	goModData, err := os.ReadFile("go.mod")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read go.mod: %w", err)
@@ -1442,7 +1469,7 @@ func findUncoveredLargeFunctions(profilePath string) ([]string, error) {
 			return nil
 		}
 
-		funcs := largeFunctions(path)
+		funcs := largeFunctions(path, maxUncoveredFuncLines)
 		if len(funcs) == 0 {
 			return nil
 		}
@@ -1466,35 +1493,35 @@ func findUncoveredLargeFunctions(profilePath string) ([]string, error) {
 	return violations, nil
 }
 
-func checkTestDuration() error {
-	log.Printf("Checking test duration (maximum %s per package)...", maxTestDuration)
+func checkTestDuration(maxDuration time.Duration) error {
+	log.Printf("Checking test duration (maximum %s per package)...", maxDuration)
 
-	cmd := exec.Command("go", "test", "-json", fmt.Sprintf("-timeout=%s", maxTestDuration), "./...")
+	cmd := exec.Command("go", "test", "-json", fmt.Sprintf("-timeout=%s", maxDuration), "./...")
 	cmd.Stderr = os.Stderr
 
 	out, err := cmd.Output()
 	if err != nil {
 		if len(out) > 0 {
-			violations := parseTestDurationOutput(out)
+			violations := parseTestDurationOutput(out, maxDuration)
 			if len(violations) > 0 {
 				return fmt.Errorf("test duration violations (maximum %s per package):\n%s",
-					maxTestDuration, strings.Join(violations, "\n"))
+					maxDuration, strings.Join(violations, "\n"))
 			}
 		}
 
 		return fmt.Errorf("failed to run test duration check: %w", err)
 	}
 
-	violations := parseTestDurationOutput(out)
+	violations := parseTestDurationOutput(out, maxDuration)
 	if len(violations) > 0 {
 		return fmt.Errorf("test duration violations (maximum %s per package):\n%s",
-			maxTestDuration, strings.Join(violations, "\n"))
+			maxDuration, strings.Join(violations, "\n"))
 	}
 
 	return nil
 }
 
-func parseTestDurationOutput(data []byte) []string {
+func parseTestDurationOutput(data []byte, maxDuration time.Duration) []string {
 	type testEvent struct {
 		Action  string  `json:"Action"`
 		Package string  `json:"Package"`
@@ -1519,17 +1546,17 @@ func parseTestDurationOutput(data []byte) []string {
 		}
 
 		elapsed := time.Duration(event.Elapsed * float64(time.Second))
-		if elapsed > maxTestDuration {
+		if elapsed > maxDuration {
 			violations = append(violations,
-				fmt.Sprintf("  - %s: %s (maximum %s)", event.Package, elapsed, maxTestDuration))
+				fmt.Sprintf("  - %s: %s (maximum %s)", event.Package, elapsed, maxDuration))
 		}
 	}
 
 	return violations
 }
 
-func checkCoverage() error {
-	log.Println("Checking code coverage (minimum 80% per package)...")
+func checkCoverage(minCoverage float64, maxUncoveredFuncLines int) error {
+	log.Printf("Checking code coverage (minimum %.0f%% per package)...", minCoverage)
 
 	tmpFile, err := os.CreateTemp("", "coverage-*.out")
 	if err != nil {
@@ -1558,12 +1585,12 @@ func checkCoverage() error {
 
 	modulePath := parseModulePath(string(goModData))
 
-	violations, err := parseCoverageOutput(stdout.String(), modulePath)
+	violations, err := parseCoverageOutput(stdout.String(), modulePath, minCoverage)
 	if err != nil {
 		return err
 	}
 
-	funcViolations, err := findUncoveredLargeFunctions(tmpFile.Name())
+	funcViolations, err := findUncoveredLargeFunctions(tmpFile.Name(), maxUncoveredFuncLines)
 	if err != nil {
 		return err
 	}
@@ -1572,13 +1599,13 @@ func checkCoverage() error {
 
 	if len(violations) > 0 {
 		return fmt.Errorf("coverage violations (minimum %.0f%%):\n%s",
-			MinCoveragePercent, strings.Join(violations, "\n"))
+			minCoverage, strings.Join(violations, "\n"))
 	}
 
 	return nil
 }
 
-func parseCoverageOutput(output, modulePath string) ([]string, error) {
+func parseCoverageOutput(output, modulePath string, minCoverage float64) ([]string, error) {
 	var violations []string
 
 	coverageRegex := regexp.MustCompile(`ok\s+(\S+)\s+(?:[\d.]+s|\(cached\))\s+coverage:\s+([\d.]+)%`)
@@ -1597,9 +1624,9 @@ func parseCoverageOutput(output, modulePath string) ([]string, error) {
 				continue
 			}
 
-			if coverage < MinCoveragePercent {
+			if coverage < minCoverage {
 				violations = append(violations,
-					fmt.Sprintf("  - %s: %.1f%% coverage (minimum %.0f%%)", pkgName, coverage, MinCoveragePercent))
+					fmt.Sprintf("  - %s: %.1f%% coverage (minimum %.0f%%)", pkgName, coverage, minCoverage))
 			}
 		}
 
