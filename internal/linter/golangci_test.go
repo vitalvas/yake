@@ -88,6 +88,26 @@ func TestGetGolangCI(t *testing.T) {
 		}
 	})
 
+	t.Run("contains expected formatters", func(t *testing.T) {
+		result := GetGolangCI()
+
+		expectedFormatters := []string{
+			"gofmt",
+			"gofumpt",
+			"goimports",
+		}
+
+		for _, formatter := range expectedFormatters {
+			assert.Contains(t, result.Formatters.Enable, formatter)
+		}
+	})
+
+	t.Run("formatters are sorted", func(t *testing.T) {
+		result := GetGolangCI()
+
+		assert.True(t, slices.IsSorted(result.Formatters.Enable))
+	})
+
 	t.Run("formatters have same exclusion paths as linters", func(t *testing.T) {
 		result := GetGolangCI()
 

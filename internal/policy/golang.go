@@ -64,6 +64,12 @@ func RunGolangChecks() error {
 		}
 	}
 
+	if cfg.Policy.CompositeLiteral.isEnabled() {
+		if err := checkCompositeLiteral(cfg.Policy.CompositeLiteral.getMaxSingleLineFields()); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
+	}
+
 	if cfg.Policy.Stuttering.isEnabled() {
 		if err := checkStuttering(); err != nil {
 			allErrors = append(allErrors, err.Error())
@@ -591,6 +597,105 @@ func findFuncSignatureViolations(filePath string, maxParams, maxResults int) []s
 					filePath, pos.Line, fn.Name.Name, resultCount, maxResults))
 		}
 	}
+
+	return violations
+}
+
+func checkCompositeLiteral(maxSingleLineFields int) error {
+	log.Println("Checking composite literal formatting...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findCompositeLiteralViolations(path, maxSingleLineFields)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("composite literal violations (each field must be on its own line):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findCompositeLiteralViolations(filePath string, maxSingleLineFields int) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	if hasSkipDirective(filePath) {
+		return nil
+	}
+
+	var violations []string
+
+	ast.Inspect(node, func(n ast.Node) bool {
+		comp, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		kvElts := 0
+		for _, elt := range comp.Elts {
+			if _, ok := elt.(*ast.KeyValueExpr); ok {
+				kvElts++
+			}
+		}
+
+		if kvElts <= 1 {
+			return true
+		}
+
+		openLine := fset.Position(comp.Lbrace).Line
+		closeLine := fset.Position(comp.Rbrace).Line
+
+		if openLine == closeLine && kvElts <= maxSingleLineFields {
+			return true
+		}
+
+		lineSet := make(map[int]int)
+		for _, elt := range comp.Elts {
+			line := fset.Position(elt.Pos()).Line
+			lineSet[line]++
+		}
+
+		for line, count := range lineSet {
+			if count > 1 {
+				violations = append(violations,
+					fmt.Sprintf("  - %s:%d: composite literal has %d fields on the same line",
+						filePath, line, count))
+			}
+		}
+
+		return true
+	})
 
 	return violations
 }

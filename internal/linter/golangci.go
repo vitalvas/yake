@@ -26,6 +26,7 @@ type GolangCILinterSettingsGosec struct {
 }
 
 type GolangCIFormatters struct {
+	Enable     []string           `yaml:"enable,omitempty"`
 	Exclusions GolangCIExclusions `yaml:"exclusions,omitempty"`
 }
 
@@ -80,6 +81,11 @@ func GetGolangCI() GolangCI {
 			},
 		},
 		Formatters: GolangCIFormatters{
+			Enable: []string{
+				"gofmt",
+				"gofumpt",
+				"goimports",
+			},
 			Exclusions: GolangCIExclusions{
 				Generated: "lax",
 				Paths: []string{
@@ -95,6 +101,7 @@ func GetGolangCI() GolangCI {
 	slices.Sort(data.Linters.Enable)
 	slices.Sort(data.Linters.Exclusions.Presets)
 	slices.Sort(data.Linters.Exclusions.Paths)
+	slices.Sort(data.Formatters.Enable)
 	slices.Sort(data.Formatters.Exclusions.Presets)
 	slices.Sort(data.Formatters.Exclusions.Paths)
 	slices.Sort(data.Linters.Settings.GoSec.Excludes)

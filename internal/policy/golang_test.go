@@ -3154,6 +3154,319 @@ func doWork() (int, string, bool, error, float64, byte) {
 	})
 }
 
+func Test_checkCompositeLiteral(t *testing.T) {
+	t.Run("allows one field per line", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+	c int
+}
+
+func foo() cfg {
+	return cfg{
+		a: 1,
+		b: 2,
+		c: 3,
+	}
+}
+`
+		require.NoError(t, os.WriteFile("test.go", []byte(content), 0644))
+
+		err := checkCompositeLiteral(defaultMaxSingleLineFields)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects multiple fields on same line", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+	c int
+}
+
+func foo() cfg {
+	return cfg{
+		a: 1, b: 2,
+		c: 3,
+	}
+}
+`
+		require.NoError(t, os.WriteFile("test.go", []byte(content), 0644))
+
+		err := checkCompositeLiteral(defaultMaxSingleLineFields)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "2 fields on the same line")
+	})
+
+	t.Run("allows single field inline", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := `package test
+
+type cfg struct {
+	a int
+}
+
+func foo() cfg {
+	return cfg{a: 1}
+}
+`
+		require.NoError(t, os.WriteFile("test.go", []byte(content), 0644))
+
+		err := checkCompositeLiteral(defaultMaxSingleLineFields)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows positional elements", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := `package test
+
+func foo() []int {
+	return []int{1, 2, 3}
+}
+`
+		require.NoError(t, os.WriteFile("test.go", []byte(content), 0644))
+
+		err := checkCompositeLiteral(defaultMaxSingleLineFields)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips file with skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := `//yake:skip-test
+package test
+
+type cfg struct {
+	a int
+	b int
+}
+
+func foo() cfg {
+	return cfg{a: 1, b: 2}
+}
+`
+		require.NoError(t, os.WriteFile("test.go", []byte(content), 0644))
+
+		err := checkCompositeLiteral(defaultMaxSingleLineFields)
+
+		assert.NoError(t, err)
+	})
+}
+
+func Test_findCompositeLiteralViolations(t *testing.T) {
+	t.Run("allows all on single line", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+	c int
+}
+
+func foo() cfg {
+	return cfg{a: 1, b: 2, c: 3}
+}
+`
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := findCompositeLiteralViolations(path, defaultMaxSingleLineFields)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("detects multiple fields per line in multiline literal", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+	c int
+}
+
+func foo() cfg {
+	return cfg{
+		a: 1, b: 2,
+		c: 3,
+	}
+}
+`
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := findCompositeLiteralViolations(path, defaultMaxSingleLineFields)
+
+		assert.NotEmpty(t, violations)
+		assert.Contains(t, violations[0], "2 fields on the same line")
+	})
+
+	t.Run("no violations for proper formatting", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+}
+
+func foo() cfg {
+	return cfg{
+		a: 1,
+		b: 2,
+	}
+}
+`
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := findCompositeLiteralViolations(path, defaultMaxSingleLineFields)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("allows single line up to max fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+	c int
+	d int
+	e int
+}
+
+func foo() cfg {
+	return cfg{a: 1, b: 2, c: 3, d: 4, e: 5}
+}
+`
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := findCompositeLiteralViolations(path, 5)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("rejects single line exceeding max fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+	c int
+	d int
+	e int
+	f int
+}
+
+func foo() cfg {
+	return cfg{a: 1, b: 2, c: 3, d: 4, e: 5, f: 6}
+}
+`
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := findCompositeLiteralViolations(path, 5)
+
+		assert.NotEmpty(t, violations)
+		assert.Contains(t, violations[0], "6 fields on the same line")
+	})
+
+	t.Run("custom max allows fewer fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+	c int
+}
+
+func foo() cfg {
+	return cfg{a: 1, b: 2, c: 3}
+}
+`
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := findCompositeLiteralViolations(path, 2)
+
+		assert.NotEmpty(t, violations)
+		assert.Contains(t, violations[0], "3 fields on the same line")
+	})
+
+	t.Run("custom max allows exact count", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `package test
+
+type cfg struct {
+	a int
+	b int
+}
+
+func foo() cfg {
+	return cfg{a: 1, b: 2}
+}
+`
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		violations := findCompositeLiteralViolations(path, 2)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("nonexistent file returns nil", func(t *testing.T) {
+		violations := findCompositeLiteralViolations("/non/existent/file.go", defaultMaxSingleLineFields)
+
+		assert.Nil(t, violations)
+	})
+}
+
 func Test_countFields(t *testing.T) {
 	tests := []struct {
 		name   string

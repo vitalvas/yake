@@ -19,6 +19,7 @@ const (
 	defaultMaxUncoveredFuncLines = 25
 	defaultMaxTestDuration       = 10 * time.Second
 	defaultPackageNamingPattern  = `^[0-9a-z]{3,32}$`
+	defaultMaxSingleLineFields   = 5
 )
 
 type Config struct {
@@ -26,17 +27,18 @@ type Config struct {
 }
 
 type policyConfig struct {
-	EntryPoints     *EntryPointsPolicy   `yaml:"entry_points"`
-	PackageNaming   *PackageNamingPolicy `yaml:"package_naming"`
-	StringConcat    *policyToggle        `yaml:"string_concat"`
-	StdlibWrappers  *policyToggle        `yaml:"stdlib_wrappers"`
-	FuncSignature   *FuncSignaturePolicy `yaml:"func_signature"`
-	Stuttering      *policyToggle        `yaml:"stuttering"`
-	GetterNaming    *policyToggle        `yaml:"getter_naming"`
-	InterfaceNaming *policyToggle        `yaml:"interface_naming"`
-	TestFileNaming  *policyToggle        `yaml:"test_file_naming"`
-	TestDuration    *TestDurationPolicy  `yaml:"test_duration"`
-	Coverage        *CoveragePolicy      `yaml:"coverage"`
+	EntryPoints      *EntryPointsPolicy      `yaml:"entry_points"`
+	PackageNaming    *PackageNamingPolicy    `yaml:"package_naming"`
+	StringConcat     *policyToggle           `yaml:"string_concat"`
+	StdlibWrappers   *policyToggle           `yaml:"stdlib_wrappers"`
+	FuncSignature    *FuncSignaturePolicy    `yaml:"func_signature"`
+	CompositeLiteral *CompositeLiteralPolicy `yaml:"composite_literal"`
+	Stuttering       *policyToggle           `yaml:"stuttering"`
+	GetterNaming     *policyToggle           `yaml:"getter_naming"`
+	InterfaceNaming  *policyToggle           `yaml:"interface_naming"`
+	TestFileNaming   *policyToggle           `yaml:"test_file_naming"`
+	TestDuration     *TestDurationPolicy     `yaml:"test_duration"`
+	Coverage         *CoveragePolicy         `yaml:"coverage"`
 }
 
 type policyToggle struct {
@@ -91,6 +93,27 @@ func (p *PackageNamingPolicy) getPattern() string {
 	}
 
 	return *p.Pattern
+}
+
+type CompositeLiteralPolicy struct {
+	Enabled             *bool `yaml:"enable"`
+	MaxSingleLineFields *int  `yaml:"max_single_line_fields"`
+}
+
+func (p *CompositeLiteralPolicy) isEnabled() bool {
+	if p == nil || p.Enabled == nil {
+		return true
+	}
+
+	return *p.Enabled
+}
+
+func (p *CompositeLiteralPolicy) getMaxSingleLineFields() int {
+	if p == nil || p.MaxSingleLineFields == nil {
+		return defaultMaxSingleLineFields
+	}
+
+	return *p.MaxSingleLineFields
 }
 
 type FuncSignaturePolicy struct {

@@ -174,6 +174,23 @@ func Test_PackageNamingPolicy(t *testing.T) {
 	})
 }
 
+func Test_CompositeLiteralPolicy(t *testing.T) {
+	t.Run("nil returns defaults", func(t *testing.T) {
+		var p *CompositeLiteralPolicy
+		assert.True(t, p.isEnabled())
+		assert.Equal(t, defaultMaxSingleLineFields, p.getMaxSingleLineFields())
+	})
+
+	t.Run("custom values", func(t *testing.T) {
+		p := &CompositeLiteralPolicy{
+			Enabled:             boolPtr(false),
+			MaxSingleLineFields: intPtr(3),
+		}
+		assert.False(t, p.isEnabled())
+		assert.Equal(t, 3, p.getMaxSingleLineFields())
+	})
+}
+
 func Test_FuncSignaturePolicy(t *testing.T) {
 	t.Run("nil returns defaults", func(t *testing.T) {
 		var p *FuncSignaturePolicy
