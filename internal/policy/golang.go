@@ -620,7 +620,7 @@ func checkCompositeLiteral(maxSingleLineFields int) error {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") {
 			return nil
 		}
 
