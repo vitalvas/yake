@@ -1234,6 +1234,88 @@ func Foo() {}
 		violations := validateSourceFile("skipped.go")
 		assert.Empty(t, violations)
 	})
+
+	t.Run("platform-specific file accepts base test file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("pty_darwin.go", []byte("package main\nfunc Foo() {}"), 0644))
+		require.NoError(t, os.WriteFile("pty_test.go", []byte(validTestFile), 0644))
+
+		violations := validateSourceFile("pty_darwin.go")
+		assert.Empty(t, violations)
+	})
+
+	t.Run("platform-specific file accepts platform-specific test file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("pty_linux.go", []byte("package main\nfunc Foo() {}"), 0644))
+		require.NoError(t, os.WriteFile("pty_linux_test.go", []byte(validTestFile), 0644))
+
+		violations := validateSourceFile("pty_linux.go")
+		assert.Empty(t, violations)
+	})
+
+	t.Run("platform-specific file missing both test files reports violation", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("pty_windows.go", []byte("package main\nfunc Foo() {}"), 0644))
+
+		violations := validateSourceFile("pty_windows.go")
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "missing test file")
+	})
+
+	t.Run("goos_goarch file accepts base test file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("pty_linux_amd64.go", []byte("package main\nfunc Foo() {}"), 0644))
+		require.NoError(t, os.WriteFile("pty_test.go", []byte(validTestFile), 0644))
+
+		violations := validateSourceFile("pty_linux_amd64.go")
+		assert.Empty(t, violations)
+	})
+}
+
+func Test_stripPlatformSuffix(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+		stripped bool
+	}{
+		{"pty_darwin", "pty", true},
+		{"pty_linux", "pty", true},
+		{"pty_windows", "pty", true},
+		{"pty_linux_amd64", "pty", true},
+		{"pty_darwin_arm64", "pty", true},
+		{"conn_amd64", "conn", true},
+		{"service", "service", false},
+		{"auth_cache", "auth_cache", false},
+		{"multi_word_service", "multi_word_service", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, ok := stripPlatformSuffix(tt.input)
+			assert.Equal(t, tt.expected, got)
+			assert.Equal(t, tt.stripped, ok)
+		})
+	}
 }
 
 func Test_hasTestingImport(t *testing.T) {

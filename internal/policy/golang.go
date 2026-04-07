@@ -1230,6 +1230,47 @@ func validateTestFileName(testPath string) []string {
 	return violations
 }
 
+// goOSNames contains all valid GOOS values recognized by Go's build system.
+var goOSNames = map[string]bool{
+	"aix": true, "android": true, "darwin": true, "dragonfly": true,
+	"freebsd": true, "hurd": true, "illumos": true, "ios": true,
+	"js": true, "linux": true, "nacl": true, "netbsd": true,
+	"openbsd": true, "plan9": true, "solaris": true, "wasip1": true,
+	"windows": true, "zos": true,
+}
+
+// goArchNames contains all valid GOARCH values recognized by Go's build system.
+var goArchNames = map[string]bool{
+	"386": true, "amd64": true, "arm": true, "arm64": true,
+	"loong64": true, "mips": true, "mips64": true, "mips64le": true,
+	"mipsle": true, "ppc64": true, "ppc64le": true, "riscv64": true,
+	"s390x": true, "wasm": true,
+}
+
+// stripPlatformSuffix removes trailing _GOOS, _GOARCH, or _GOOS_GOARCH from a base name.
+// Returns the stripped name and true if a suffix was removed.
+func stripPlatformSuffix(base string) (string, bool) {
+	parts := strings.Split(base, "_")
+
+	if len(parts) >= 3 {
+		osVal := parts[len(parts)-2]
+		archVal := parts[len(parts)-1]
+
+		if goOSNames[osVal] && goArchNames[archVal] {
+			return strings.Join(parts[:len(parts)-2], "_"), true
+		}
+	}
+
+	if len(parts) >= 2 {
+		last := parts[len(parts)-1]
+		if goOSNames[last] || goArchNames[last] {
+			return strings.Join(parts[:len(parts)-1], "_"), true
+		}
+	}
+
+	return base, false
+}
+
 func validateSourceFile(sourcePath string) []string {
 	if hasSkipDirective(sourcePath) {
 		return nil
@@ -1245,6 +1286,13 @@ func validateSourceFile(sourcePath string) []string {
 	testPath := filepath.Join(dir, testFile)
 
 	if _, err := os.Stat(testPath); os.IsNotExist(err) {
+		if stripped, ok := stripPlatformSuffix(baseName); ok {
+			altTestPath := filepath.Join(dir, fmt.Sprintf("%s_test.go", stripped))
+			if _, err := os.Stat(altTestPath); err == nil {
+				return violations
+			}
+		}
+
 		violations = append(violations,
 			fmt.Sprintf("  - %s: missing test file '%s'", sourcePath, testPath))
 	}
