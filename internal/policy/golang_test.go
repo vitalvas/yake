@@ -1235,7 +1235,7 @@ func Foo() {}
 		assert.Empty(t, violations)
 	})
 
-	t.Run("platform-specific file accepts base test file", func(t *testing.T) {
+	t.Run("platform-specific _GOOS file skips test requirement", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
@@ -1243,41 +1243,25 @@ func Foo() {}
 		os.Chdir(tmpDir)
 
 		require.NoError(t, os.WriteFile("pty_darwin.go", []byte("package main\nfunc Foo() {}"), 0644))
-		require.NoError(t, os.WriteFile("pty_test.go", []byte(validTestFile), 0644))
 
 		violations := validateSourceFile("pty_darwin.go")
 		assert.Empty(t, violations)
 	})
 
-	t.Run("platform-specific file accepts platform-specific test file", func(t *testing.T) {
+	t.Run("platform-specific _GOARCH file skips test requirement", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
 
 		os.Chdir(tmpDir)
 
-		require.NoError(t, os.WriteFile("pty_linux.go", []byte("package main\nfunc Foo() {}"), 0644))
-		require.NoError(t, os.WriteFile("pty_linux_test.go", []byte(validTestFile), 0644))
+		require.NoError(t, os.WriteFile("pty_amd64.go", []byte("package main\nfunc Foo() {}"), 0644))
 
-		violations := validateSourceFile("pty_linux.go")
+		violations := validateSourceFile("pty_amd64.go")
 		assert.Empty(t, violations)
 	})
 
-	t.Run("platform-specific file missing both test files reports violation", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-
-		os.Chdir(tmpDir)
-
-		require.NoError(t, os.WriteFile("pty_windows.go", []byte("package main\nfunc Foo() {}"), 0644))
-
-		violations := validateSourceFile("pty_windows.go")
-		require.Len(t, violations, 1)
-		assert.Contains(t, violations[0], "missing test file")
-	})
-
-	t.Run("goos_goarch file accepts base test file", func(t *testing.T) {
+	t.Run("platform-specific _GOOS_GOARCH file skips test requirement", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
@@ -1285,7 +1269,6 @@ func Foo() {}
 		os.Chdir(tmpDir)
 
 		require.NoError(t, os.WriteFile("pty_linux_amd64.go", []byte("package main\nfunc Foo() {}"), 0644))
-		require.NoError(t, os.WriteFile("pty_test.go", []byte(validTestFile), 0644))
 
 		violations := validateSourceFile("pty_linux_amd64.go")
 		assert.Empty(t, violations)
