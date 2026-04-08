@@ -43,13 +43,16 @@ func TestGetGolangWorkflow(t *testing.T) {
 		job, ok := result.Jobs.Get("linter")
 		require.True(t, ok)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
-		require.Len(t, job.Steps, 3)
+		require.Len(t, job.Steps, 4)
 		assert.Equal(t, "actions/checkout@v6", job.Steps[0].Uses)
 		assert.Equal(t, "actions/setup-go@v6", job.Steps[1].Uses)
 		assert.Equal(t, "go.mod", job.Steps[1].With["go-version-file"])
 		assert.Equal(t, "golangci-lint", job.Steps[2].Name)
 		assert.Equal(t, "golangci/golangci-lint-action@v9", job.Steps[2].Uses)
-		assert.Equal(t, "--timeout=5m", job.Steps[2].With["args"])
+		assert.Equal(t, "--timeout=5m --output.text.path=lint-report.txt", job.Steps[2].With["args"])
+		assert.Equal(t, "golangci-lint output", job.Steps[3].Name)
+		assert.Equal(t, "always()", job.Steps[3].If)
+		assert.Contains(t, job.Steps[3].Run, "GITHUB_STEP_SUMMARY")
 	})
 
 	t.Run("contains tests job", func(t *testing.T) {

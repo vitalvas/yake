@@ -36,7 +36,12 @@ func GetGolangWorkflow() Workflow {
 						{
 							Name: "golangci-lint",
 							Uses: "golangci/golangci-lint-action@v9",
-							With: map[string]string{"args": "--timeout=5m"},
+							With: map[string]string{"args": "--timeout=5m --output.text.path=lint-report.txt"},
+						},
+						{
+							Name: "golangci-lint output",
+							If:   "always()",
+							Run:  "cat lint-report.txt\ncat lint-report.txt >> \"$GITHUB_STEP_SUMMARY\"",
 						},
 					},
 				},

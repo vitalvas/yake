@@ -33,7 +33,12 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          args: --timeout=5m
+          args: --timeout=5m --output.text.path=lint-report.txt
+      - name: golangci-lint output
+        if: always()
+        run: |-
+          cat lint-report.txt
+          cat lint-report.txt >> "$GITHUB_STEP_SUMMARY"
   tests:
     runs-on: ubuntu-latest
     steps:
