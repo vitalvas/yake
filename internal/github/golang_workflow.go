@@ -7,6 +7,9 @@ func GetGolangWorkflow() Workflow {
 		Name: "golang",
 		On: WorkflowOn{
 			WorkflowDispatch: &struct{}{},
+			MergeGroup: &WorkflowTrigger{
+				Types: []string{"checks_requested"},
+			},
 			PullRequest: &WorkflowTrigger{
 				Types: []string{"opened", "synchronize", "reopened"},
 				Paths: goPaths,
@@ -15,20 +18,24 @@ func GetGolangWorkflow() Workflow {
 				Paths: goPaths,
 			},
 		},
+		Concurrency: &WorkflowConcurrency{
+			Group:            `go-${{ github.event.number || github.ref }}`,
+			CancelInProgress: `${{ github.event.action != 'merge_group' }}`,
+		},
 		Jobs: OrderedJobs{
 			{
 				Name: "linter",
 				Job: WorkflowJob{
 					RunsOn: "ubuntu-latest",
 					Steps: []WorkflowStep{
-						{Uses: "actions/checkout@v4"},
+						{Uses: "actions/checkout@v6"},
 						{
-							Uses: "actions/setup-go@v5",
+							Uses: "actions/setup-go@v6",
 							With: map[string]string{"go-version-file": "go.mod"},
 						},
 						{
 							Name: "golangci-lint",
-							Uses: "golangci/golangci-lint-action@v8",
+							Uses: "golangci/golangci-lint-action@v9",
 							With: map[string]string{"args": "--timeout=5m"},
 						},
 					},
@@ -39,9 +46,9 @@ func GetGolangWorkflow() Workflow {
 				Job: WorkflowJob{
 					RunsOn: "ubuntu-latest",
 					Steps: []WorkflowStep{
-						{Uses: "actions/checkout@v4"},
+						{Uses: "actions/checkout@v6"},
 						{
-							Uses: "actions/setup-go@v5",
+							Uses: "actions/setup-go@v6",
 							With: map[string]string{"go-version-file": "go.mod"},
 						},
 						{
@@ -54,7 +61,8 @@ func GetGolangWorkflow() Workflow {
 						},
 						{
 							Name: "Publish coverage",
-							Uses: "codecov/codecov-action@v5",
+							If:   "${{ secrets.CODECOV_TOKEN != '' }}",
+							Uses: "codecov/codecov-action@v6",
 							Env:  map[string]string{"CODECOV_TOKEN": "${{ secrets.CODECOV_TOKEN }}"},
 							With: map[string]string{"files": "./coverage.txt"},
 						},

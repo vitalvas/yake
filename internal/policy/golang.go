@@ -82,8 +82,6 @@ func RunGolangChecks() error {
 		}
 	}
 
-
-
 	if cfg.Policy.TestFileNaming.isEnabled() {
 		if err := checkTestFileNaming(); err != nil {
 			allErrors = append(allErrors, err.Error())
@@ -1006,7 +1004,6 @@ func findGetterViolations(filePath string) []string {
 
 	return violations
 }
-
 
 func checkTestFileNaming() error {
 	log.Println("Checking test file naming conventions...")

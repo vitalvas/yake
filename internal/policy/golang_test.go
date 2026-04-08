@@ -3995,7 +3995,6 @@ func (u *User) GetName() string {
 	})
 }
 
-
 func Test_findStutteringViolations(t *testing.T) {
 	t.Run("returns nil for unparseable file", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -4019,4 +4018,3 @@ func Test_findGetterViolations(t *testing.T) {
 		assert.Nil(t, violations)
 	})
 }
-

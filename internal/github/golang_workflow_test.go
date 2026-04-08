@@ -18,6 +18,12 @@ func TestGetGolangWorkflow(t *testing.T) {
 		assert.NotNil(t, result.On.WorkflowDispatch)
 	})
 
+	t.Run("configures merge group trigger", func(t *testing.T) {
+		result := GetGolangWorkflow()
+		require.NotNil(t, result.On.MergeGroup)
+		assert.Equal(t, []string{"checks_requested"}, result.On.MergeGroup.Types)
+	})
+
 	t.Run("configures pull request trigger", func(t *testing.T) {
 		result := GetGolangWorkflow()
 		require.NotNil(t, result.On.PullRequest)
@@ -38,11 +44,11 @@ func TestGetGolangWorkflow(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
 		require.Len(t, job.Steps, 3)
-		assert.Equal(t, "actions/checkout@v4", job.Steps[0].Uses)
-		assert.Equal(t, "actions/setup-go@v5", job.Steps[1].Uses)
+		assert.Equal(t, "actions/checkout@v6", job.Steps[0].Uses)
+		assert.Equal(t, "actions/setup-go@v6", job.Steps[1].Uses)
 		assert.Equal(t, "go.mod", job.Steps[1].With["go-version-file"])
 		assert.Equal(t, "golangci-lint", job.Steps[2].Name)
-		assert.Equal(t, "golangci/golangci-lint-action@v8", job.Steps[2].Uses)
+		assert.Equal(t, "golangci/golangci-lint-action@v9", job.Steps[2].Uses)
 		assert.Equal(t, "--timeout=5m", job.Steps[2].With["args"])
 	})
 
@@ -52,16 +58,24 @@ func TestGetGolangWorkflow(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "ubuntu-latest", job.RunsOn)
 		require.Len(t, job.Steps, 5)
-		assert.Equal(t, "actions/checkout@v4", job.Steps[0].Uses)
-		assert.Equal(t, "actions/setup-go@v5", job.Steps[1].Uses)
+		assert.Equal(t, "actions/checkout@v6", job.Steps[0].Uses)
+		assert.Equal(t, "actions/setup-go@v6", job.Steps[1].Uses)
 		assert.Equal(t, "Test", job.Steps[2].Name)
 		assert.Contains(t, job.Steps[2].Run, "coverprofile")
 		assert.Equal(t, "Test Race", job.Steps[3].Name)
 		assert.Contains(t, job.Steps[3].Run, "-race")
 		assert.Equal(t, "Publish coverage", job.Steps[4].Name)
-		assert.Equal(t, "codecov/codecov-action@v5", job.Steps[4].Uses)
+		assert.Equal(t, "${{ secrets.CODECOV_TOKEN != '' }}", job.Steps[4].If)
+		assert.Equal(t, "codecov/codecov-action@v6", job.Steps[4].Uses)
 		assert.Equal(t, "${{ secrets.CODECOV_TOKEN }}", job.Steps[4].Env["CODECOV_TOKEN"])
 		assert.Equal(t, "./coverage.txt", job.Steps[4].With["files"])
+	})
+
+	t.Run("configures concurrency", func(t *testing.T) {
+		result := GetGolangWorkflow()
+		require.NotNil(t, result.Concurrency)
+		assert.Equal(t, `go-${{ github.event.number || github.ref }}`, result.Concurrency.Group)
+		assert.Equal(t, `${{ github.event.action != 'merge_group' }}`, result.Concurrency.CancelInProgress)
 	})
 
 	t.Run("has no permissions set", func(t *testing.T) {

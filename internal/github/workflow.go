@@ -7,10 +7,11 @@ import (
 )
 
 type Workflow struct {
-	Name        string              `yaml:"name"`
-	On          WorkflowOn          `yaml:"on"`
-	Permissions WorkflowPermissions `yaml:"permissions,omitempty"`
-	Jobs        OrderedJobs         `yaml:"jobs"`
+	Name        string               `yaml:"name"`
+	On          WorkflowOn           `yaml:"on"`
+	Concurrency *WorkflowConcurrency `yaml:"concurrency,omitempty"`
+	Permissions WorkflowPermissions  `yaml:"permissions,omitempty"`
+	Jobs        OrderedJobs          `yaml:"jobs"`
 }
 
 // Marshal encodes the workflow to YAML with unquoted "on" key.
@@ -31,6 +32,7 @@ func (w Workflow) Marshal() ([]byte, error) {
 
 type WorkflowOn struct {
 	WorkflowDispatch *struct{}        `yaml:"workflow_dispatch,omitempty"`
+	MergeGroup       *WorkflowTrigger `yaml:"merge_group,omitempty"`
 	PullRequest      *WorkflowTrigger `yaml:"pull_request,omitempty"`
 	Push             *WorkflowTrigger `yaml:"push,omitempty"`
 }
@@ -39,6 +41,11 @@ type WorkflowTrigger struct {
 	Branches []string `yaml:"branches,omitempty"`
 	Types    []string `yaml:"types,omitempty"`
 	Paths    []string `yaml:"paths,omitempty"`
+}
+
+type WorkflowConcurrency struct {
+	Group            string `yaml:"group,omitempty"`
+	CancelInProgress string `yaml:"cancel-in-progress,omitempty"`
 }
 
 type WorkflowPermissions struct {
