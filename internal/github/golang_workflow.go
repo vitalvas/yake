@@ -60,8 +60,14 @@ func GetGolangWorkflow() Workflow {
 							Run:  "go test -race ./...",
 						},
 						{
+							Name: "Check codecov token",
+							ID:   "check-codecov",
+							Env:  map[string]string{"CODECOV_TOKEN": "${{ secrets.CODECOV_TOKEN }}"},
+							Run:  `if [ -n "$CODECOV_TOKEN" ]; then echo "available=true" >> "$GITHUB_OUTPUT"; fi`,
+						},
+						{
 							Name: "Publish coverage",
-							If:   "${{ secrets.CODECOV_TOKEN != '' }}",
+							If:   "steps.check-codecov.outputs.available == 'true'",
 							Uses: "codecov/codecov-action@v6",
 							Env:  map[string]string{"CODECOV_TOKEN": "${{ secrets.CODECOV_TOKEN }}"},
 							With: map[string]string{"files": "./coverage.txt"},

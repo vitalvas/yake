@@ -45,8 +45,13 @@ jobs:
         run: go test -coverprofile=coverage.txt -covermode=atomic ./...
       - name: Test Race
         run: go test -race ./...
+      - name: Check codecov token
+        id: check-codecov
+        run: if [ -n "$CODECOV_TOKEN" ]; then echo "available=true" >> "$GITHUB_OUTPUT"; fi
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Publish coverage
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        if: steps.check-codecov.outputs.available == 'true'
         uses: codecov/codecov-action@v6
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

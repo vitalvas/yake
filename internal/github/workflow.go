@@ -93,6 +93,7 @@ type WorkflowJob struct {
 	RunsOn  string            `yaml:"runs-on"`
 	Needs   []string          `yaml:"needs,omitempty"`
 	If      string            `yaml:"if,omitempty"`
+	Env     map[string]string `yaml:"env,omitempty"`
 	Outputs map[string]string `yaml:"outputs,omitempty"`
 	Steps   []WorkflowStep    `yaml:"steps"`
 }
