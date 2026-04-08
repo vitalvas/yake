@@ -82,11 +82,7 @@ func RunGolangChecks() error {
 		}
 	}
 
-	if cfg.Policy.InterfaceNaming.isEnabled() {
-		if err := checkInterfaceNaming(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
+
 
 	if cfg.Policy.TestFileNaming.isEnabled() {
 		if err := checkTestFileNaming(); err != nil {
@@ -1011,116 +1007,6 @@ func findGetterViolations(filePath string) []string {
 	return violations
 }
 
-func checkInterfaceNaming() error {
-	log.Println("Checking interface naming conventions...")
-
-	var violations []string
-
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
-				return filepath.SkipDir
-			}
-
-			return nil
-		}
-
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-
-		fileViolations := findInterfaceNamingViolations(path)
-		violations = append(violations, fileViolations...)
-
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to walk directory: %w", err)
-	}
-
-	if len(violations) > 0 {
-		return fmt.Errorf("interface naming violations:\n%s",
-			strings.Join(violations, "\n"))
-	}
-
-	return nil
-}
-
-func findInterfaceNamingViolations(filePath string) []string {
-	fset := token.NewFileSet()
-
-	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
-	if err != nil {
-		return nil
-	}
-
-	var violations []string
-
-	for _, decl := range node.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-
-			ifaceType, ok := typeSpec.Type.(*ast.InterfaceType)
-			if !ok {
-				continue
-			}
-
-			name := typeSpec.Name.Name
-
-			if strings.HasSuffix(name, "Interface") {
-				pos := fset.Position(typeSpec.Pos())
-				trimmed := strings.TrimSuffix(name, "Interface")
-				violations = append(violations,
-					fmt.Sprintf("  - %s:%d: interface '%s' should not have 'Interface' suffix; consider '%s'",
-						filePath, pos.Line, name, trimmed))
-			}
-
-			if ifaceType.Methods == nil {
-				continue
-			}
-
-			methodCount := 0
-			embedCount := 0
-
-			var methodName string
-
-			for _, field := range ifaceType.Methods.List {
-				if _, ok := field.Type.(*ast.FuncType); ok {
-					methodCount++
-					if len(field.Names) > 0 {
-						methodName = field.Names[0].Name
-					}
-				} else {
-					embedCount++
-				}
-			}
-
-			if methodCount == 1 && embedCount == 0 && methodName != "" && !strings.HasSuffix(name, "er") {
-				pos := fset.Position(typeSpec.Pos())
-				suggested := fmt.Sprintf("%ser", methodName)
-				violations = append(violations,
-					fmt.Sprintf("  - %s:%d: single-method interface '%s' should use '-er' suffix (e.g., '%s')",
-						filePath, pos.Line, name, suggested))
-			}
-		}
-	}
-
-	return violations
-}
 
 func checkTestFileNaming() error {
 	log.Println("Checking test file naming conventions...")

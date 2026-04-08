@@ -35,7 +35,6 @@ type policyConfig struct {
 	CompositeLiteral *CompositeLiteralPolicy `yaml:"composite_literal"`
 	Stuttering       *policyToggle           `yaml:"stuttering"`
 	GetterNaming     *policyToggle           `yaml:"getter_naming"`
-	InterfaceNaming  *policyToggle           `yaml:"interface_naming"`
 	TestFileNaming   *policyToggle           `yaml:"test_file_naming"`
 	TestDuration     *TestDurationPolicy     `yaml:"test_duration"`
 	Coverage         *CoveragePolicy         `yaml:"coverage"`
