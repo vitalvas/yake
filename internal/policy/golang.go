@@ -82,6 +82,12 @@ func RunGolangChecks() error {
 		}
 	}
 
+	if cfg.Policy.PrivateExportedMethods.isEnabled() {
+		if err := checkPrivateExportedMethods(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
+	}
+
 	if cfg.Policy.TestFileNaming.isEnabled() {
 		if err := checkTestFileNaming(); err != nil {
 			allErrors = append(allErrors, err.Error())
@@ -1003,6 +1009,210 @@ func findGetterViolations(filePath string) []string {
 	}
 
 	return violations
+}
+
+// stdlibInterfaceMethods lists exported method names from well-known standard library
+// interfaces. Private structs are allowed to have these methods because they implement
+// interfaces rather than exposing arbitrary public API.
+var stdlibInterfaceMethods = map[string]bool{
+	// fmt
+	"String":   true,
+	"GoString": true,
+	"Format":   true,
+
+	// error
+	"Error":  true,
+	"Unwrap": true,
+
+	// encoding/json
+	"MarshalJSON":   true,
+	"UnmarshalJSON": true,
+
+	// encoding
+	"MarshalText":     true,
+	"UnmarshalText":   true,
+	"MarshalBinary":   true,
+	"UnmarshalBinary": true,
+
+	// io
+	"Read":     true,
+	"Write":    true,
+	"Close":    true,
+	"ReadAt":   true,
+	"WriteAt":  true,
+	"Seek":     true,
+	"ReadFrom": true,
+	"WriteTo":  true,
+
+	// sort.Interface
+	"Len":  true,
+	"Less": true,
+	"Swap": true,
+
+	// net/http
+	"ServeHTTP": true,
+
+	// database/sql
+	"Value": true,
+	"Scan":  true,
+
+	// context
+	"Deadline": true,
+	"Done":     true,
+	"Err":      true,
+
+	// encoding/xml
+	"MarshalXML":       true,
+	"UnmarshalXML":     true,
+	"MarshalXMLAttr":   true,
+	"UnmarshalXMLAttr": true,
+
+	// flag.Value
+	"Set": true,
+
+	// proto
+	"ProtoMessage":     true,
+	"ProtoReflect":     true,
+	"Reset":            true,
+	"MarshalLogObject": true,
+	"MarshalLogArray":  true,
+}
+
+func checkPrivateExportedMethods() error {
+	log.Println("Checking for exported methods on private structs...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findPrivateExportedMethodViolations(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("private struct exported method violations (private structs should not have exported methods):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findPrivateExportedMethodViolations(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	if hasSkipDirective(filePath) {
+		return nil
+	}
+
+	privateTypes := collectPrivateTypes(node)
+
+	var violations []string
+
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || hasFuncSkipDirective(fn) {
+			continue
+		}
+
+		if !fn.Name.IsExported() {
+			continue
+		}
+
+		if stdlibInterfaceMethods[fn.Name.Name] {
+			continue
+		}
+
+		receiverName := extractReceiverTypeName(fn)
+		if receiverName == "" || !privateTypes[receiverName] {
+			continue
+		}
+
+		pos := fset.Position(fn.Pos())
+		violations = append(violations,
+			fmt.Sprintf("  - %s:%d: exported method '%s' on private struct '%s'",
+				filePath, pos.Line, fn.Name.Name, receiverName))
+	}
+
+	return violations
+}
+
+func collectPrivateTypes(node *ast.File) map[string]bool {
+	types := make(map[string]bool)
+
+	for _, decl := range node.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			name := typeSpec.Name.Name
+			if !typeSpec.Name.IsExported() {
+				types[name] = true
+			}
+		}
+	}
+
+	return types
+}
+
+func extractReceiverTypeName(fn *ast.FuncDecl) string {
+	if fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return ""
+	}
+
+	recvType := fn.Recv.List[0].Type
+
+	if starExpr, ok := recvType.(*ast.StarExpr); ok {
+		recvType = starExpr.X
+	}
+
+	// Handle generic receivers like *codec[T]
+	if indexExpr, ok := recvType.(*ast.IndexExpr); ok {
+		recvType = indexExpr.X
+	}
+
+	if indexListExpr, ok := recvType.(*ast.IndexListExpr); ok {
+		recvType = indexListExpr.X
+	}
+
+	if ident, ok := recvType.(*ast.Ident); ok {
+		return ident.Name
+	}
+
+	return ""
 }
 
 func checkTestFileNaming() error {

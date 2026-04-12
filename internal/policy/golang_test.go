@@ -4018,3 +4018,339 @@ func Test_findGetterViolations(t *testing.T) {
 		assert.Nil(t, violations)
 	})
 }
+
+func Test_checkPrivateExportedMethods(t *testing.T) {
+	t.Run("detects exported method on private struct", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/codec", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/codec/codec.go", []byte(`package codec
+
+import "io"
+
+type Packet interface{}
+
+type codec struct{}
+
+func (c *codec) WritePacket(w io.Writer, packet Packet, maxSize uint32) (int, error) {
+	return 0, nil
+}
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "WritePacket")
+		assert.Contains(t, err.Error(), "codec")
+	})
+
+	t.Run("allows unexported methods on private struct", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type service struct{}
+
+func (s *service) run() error {
+	return nil
+}
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows exported methods on public struct", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type Service struct{}
+
+func (s *Service) Run() error {
+	return nil
+}
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows String method on private struct", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type status struct {
+	code int
+}
+
+func (s *status) String() string {
+	return "ok"
+}
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows Error method on private struct", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type myError struct {
+	msg string
+}
+
+func (e *myError) Error() string {
+	return e.msg
+}
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows MarshalJSON on private struct", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type data struct{}
+
+func (d *data) MarshalJSON() ([]byte, error) {
+	return nil, nil
+}
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows ServeHTTP on private struct", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+import "net/http"
+
+type handler struct{}
+
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects multiple violations in same file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type worker struct{}
+
+func (w *worker) Start() error { return nil }
+func (w *worker) Stop() error { return nil }
+func (w *worker) String() string { return "worker" }
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Start")
+		assert.Contains(t, err.Error(), "Stop")
+		assert.NotContains(t, err.Error(), "String")
+	})
+
+	t.Run("respects skip directive on file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`//yake:skip-test
+package svc
+
+type worker struct{}
+
+func (w *worker) Start() error { return nil }
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("respects skip directive on function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type worker struct{}
+
+//yake:skip-test
+func (w *worker) Start() error { return nil }
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles value receiver", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/svc", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/svc/svc.go", []byte(`package svc
+
+type worker struct{}
+
+func (w worker) Process() error { return nil }
+`), 0644))
+
+		err := checkPrivateExportedMethods()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Process")
+	})
+}
+
+func Test_findPrivateExportedMethodViolations(t *testing.T) {
+	t.Run("returns nil for unparseable file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "bad.go")
+		require.NoError(t, os.WriteFile(path, []byte("not valid go"), 0644))
+
+		violations := findPrivateExportedMethodViolations(path)
+
+		assert.Nil(t, violations)
+	})
+}
+
+func Test_extractReceiverTypeName(t *testing.T) {
+	t.Run("pointer receiver", func(t *testing.T) {
+		src := `package test
+type foo struct{}
+func (f *foo) Bar() {}
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", src, 0)
+		require.NoError(t, err)
+
+		fn := node.Decls[1].(*ast.FuncDecl)
+		assert.Equal(t, "foo", extractReceiverTypeName(fn))
+	})
+
+	t.Run("value receiver", func(t *testing.T) {
+		src := `package test
+type foo struct{}
+func (f foo) Bar() {}
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", src, 0)
+		require.NoError(t, err)
+
+		fn := node.Decls[1].(*ast.FuncDecl)
+		assert.Equal(t, "foo", extractReceiverTypeName(fn))
+	})
+
+	t.Run("no receiver", func(t *testing.T) {
+		src := `package test
+func Bar() {}
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", src, 0)
+		require.NoError(t, err)
+
+		fn := node.Decls[0].(*ast.FuncDecl)
+		assert.Equal(t, "", extractReceiverTypeName(fn))
+	})
+}
+
+func Test_collectPrivateTypes(t *testing.T) {
+	t.Run("collects private types only", func(t *testing.T) {
+		src := `package test
+type foo struct{}
+type Bar struct{}
+type baz int
+`
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, "test.go", src, 0)
+		require.NoError(t, err)
+
+		types := collectPrivateTypes(node)
+
+		assert.True(t, types["foo"])
+		assert.True(t, types["baz"])
+		assert.False(t, types["Bar"])
+	})
+}

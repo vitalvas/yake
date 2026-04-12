@@ -27,17 +27,18 @@ type Config struct {
 }
 
 type policyConfig struct {
-	EntryPoints      *EntryPointsPolicy      `yaml:"entry_points"`
-	PackageNaming    *PackageNamingPolicy    `yaml:"package_naming"`
-	StringConcat     *policyToggle           `yaml:"string_concat"`
-	StdlibWrappers   *policyToggle           `yaml:"stdlib_wrappers"`
-	FuncSignature    *FuncSignaturePolicy    `yaml:"func_signature"`
-	CompositeLiteral *CompositeLiteralPolicy `yaml:"composite_literal"`
-	Stuttering       *policyToggle           `yaml:"stuttering"`
-	GetterNaming     *policyToggle           `yaml:"getter_naming"`
-	TestFileNaming   *policyToggle           `yaml:"test_file_naming"`
-	TestDuration     *TestDurationPolicy     `yaml:"test_duration"`
-	Coverage         *CoveragePolicy         `yaml:"coverage"`
+	EntryPoints            *EntryPointsPolicy      `yaml:"entry_points"`
+	PackageNaming          *PackageNamingPolicy    `yaml:"package_naming"`
+	StringConcat           *policyToggle           `yaml:"string_concat"`
+	StdlibWrappers         *policyToggle           `yaml:"stdlib_wrappers"`
+	FuncSignature          *FuncSignaturePolicy    `yaml:"func_signature"`
+	CompositeLiteral       *CompositeLiteralPolicy `yaml:"composite_literal"`
+	Stuttering             *policyToggle           `yaml:"stuttering"`
+	GetterNaming           *policyToggle           `yaml:"getter_naming"`
+	PrivateExportedMethods *policyToggle           `yaml:"private_exported_methods"`
+	TestFileNaming         *policyToggle           `yaml:"test_file_naming"`
+	TestDuration           *TestDurationPolicy     `yaml:"test_duration"`
+	Coverage               *CoveragePolicy         `yaml:"coverage"`
 }
 
 type policyToggle struct {
