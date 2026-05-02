@@ -178,7 +178,7 @@ func Test_checkEntryPoints(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("rejects test file with package main", func(t *testing.T) {
+	t.Run("allows test file with package main", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
@@ -190,9 +190,7 @@ func Test_checkEntryPoints(t *testing.T) {
 
 		err := checkEntryPoints(defaultMaxMainLines)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "main_test.go")
-		assert.Contains(t, err.Error(), "package main only allowed in main.go")
+		assert.NoError(t, err)
 	})
 
 	t.Run("rejects extra functions in main.go", func(t *testing.T) {

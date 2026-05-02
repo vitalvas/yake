@@ -181,7 +181,7 @@ func findNonMainEntryPoints() []string {
 			return nil
 		}
 
-		if info.Name() == "main.go" {
+		if info.Name() == "main.go" || strings.HasSuffix(info.Name(), "_test.go") {
 			return nil
 		}
 
