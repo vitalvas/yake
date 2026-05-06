@@ -1397,6 +1397,10 @@ func validateSourceFile(sourcePath string) []string {
 	filename := filepath.Base(sourcePath)
 	dir := filepath.Dir(sourcePath)
 
+	if filename == "main.go" && extractPackageName(sourcePath) == "main" {
+		return violations
+	}
+
 	baseName := strings.TrimSuffix(filename, ".go")
 	testFile := fmt.Sprintf("%s_test.go", baseName)
 	testPath := filepath.Join(dir, testFile)

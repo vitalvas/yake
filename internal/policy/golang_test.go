@@ -1200,6 +1200,33 @@ func Test_validateSourceFile(t *testing.T) {
 		assert.Empty(t, violations)
 	})
 
+	t.Run("main.go skips test requirement", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		violations := validateSourceFile("main.go")
+		assert.Empty(t, violations)
+	})
+
+	t.Run("main.go with non-main package requires test", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("main.go", []byte("package qwerty\n\nfunc Foo() {}\n"), 0644))
+
+		violations := validateSourceFile("main.go")
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "missing test file")
+	})
+
 	t.Run("source file missing test", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
