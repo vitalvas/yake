@@ -4229,16 +4229,16 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
 
 type worker struct{}
 
-func (w *worker) Start() error { return nil }
-func (w *worker) Stop() error { return nil }
+func (w *worker) Process() error { return nil }
+func (w *worker) Execute() error { return nil }
 func (w *worker) String() string { return "worker" }
 `), 0644))
 
 		err := checkPrivateExportedMethods()
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "Start")
-		assert.Contains(t, err.Error(), "Stop")
+		assert.Contains(t, err.Error(), "Process")
+		assert.Contains(t, err.Error(), "Execute")
 		assert.NotContains(t, err.Error(), "String")
 	})
 

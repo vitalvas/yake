@@ -1011,69 +1011,264 @@ func findGetterViolations(filePath string) []string {
 	return violations
 }
 
-// stdlibInterfaceMethods lists exported method names from well-known standard library
-// interfaces. Private structs are allowed to have these methods because they implement
-// interfaces rather than exposing arbitrary public API.
+// stdlibInterfaceMethods lists exported method names from standard library
+// interfaces. Private structs are allowed to have these methods because they
+// implement interfaces rather than exposing arbitrary public API.
+// Generated from Go stdlib using go/parser to extract all exported interface methods.
 var stdlibInterfaceMethods = map[string]bool{
-	// fmt
-	"String":   true,
-	"GoString": true,
-	"Format":   true,
+	"Accept":                     true, // net.Listener
+	"Add":                        true, // crypto/elliptic.Curve
+	"Addr":                       true, // net.Listener
+	"Align":                      true, // reflect.Type
+	"Alignof":                    true, // go/types.Sizes
+	"AppendBinary":               true, // encoding.BinaryAppender
+	"AppendText":                 true, // encoding.TextAppender
+	"AppendUint16":               true, // encoding/binary.AppendByteOrder
+	"AppendUint32":               true, // encoding/binary.AppendByteOrder
+	"AppendUint64":               true, // encoding/binary.AppendByteOrder
+	"AssignableTo":               true, // reflect.Type
+	"At":                         true, // image.Image
+	"Begin":                      true, // database/sql/driver.Conn
+	"BeginTx":                    true, // database/sql/driver.ConnBeginTx
+	"Bits":                       true, // reflect.Type
+	"BlockSize":                  true, // crypto/cipher.Block, hash.Hash
+	"Bounds":                     true, // image.Image
+	"Bytes":                      true, // crypto.Encapsulator
+	"CanSeq":                     true, // reflect.Type
+	"CanSeq2":                    true, // reflect.Type
+	"ChanDir":                    true, // reflect.Type
+	"CheckNamedValue":            true, // database/sql/driver.NamedValueChecker
+	"Clone":                      true, // hash.Cloner
+	"Close":                      true, // io.Closer, io/fs.File, net.Conn, database/sql/driver.Conn
+	"CloseNotify":                true, // net/http.CloseNotifier
+	"ColorIndexAt":               true, // image.PalettedImage
+	"ColorModel":                 true, // image.Image
+	"ColumnConverter":            true, // database/sql/driver.ColumnConverter
+	"ColumnTypeDatabaseTypeName": true, // database/sql/driver.RowsColumnTypeDatabaseTypeName
+	"ColumnTypeLength":           true, // database/sql/driver.RowsColumnTypeLength
+	"ColumnTypeNullable":         true, // database/sql/driver.RowsColumnTypeNullable
+	"ColumnTypePrecisionScale":   true, // database/sql/driver.RowsColumnTypePrecisionScale
+	"ColumnTypeScanType":         true, // database/sql/driver.RowsColumnTypeScanType
+	"Columns":                    true, // database/sql/driver.Rows
+	"Commit":                     true, // database/sql/driver.Tx
+	"Common":                     true, // debug/dwarf.Type
+	"Comparable":                 true, // reflect.Type
+	"Connect":                    true, // database/sql/driver.Connector
+	"Control":                    true, // syscall.RawConn
+	"Convert":                    true, // image/color.Model
+	"ConvertValue":               true, // database/sql/driver.ValueConverter
+	"ConvertibleTo":              true, // reflect.Type
+	"Cookies":                    true, // net/http.CookieJar
+	"Copy":                       true, // text/template/parse.Node
+	"CryptBlocks":                true, // crypto/cipher.BlockMode
+	"Deadline":                   true, // context.Context
+	"Decapsulate":                true, // crypto.Decapsulator
+	"Decrypt":                    true, // crypto.Decrypter, crypto/cipher.Block
+	"Done":                       true, // context.Context
+	"Double":                     true, // crypto/elliptic.Curve
+	"Draw":                       true, // image/draw.Drawer
+	"Driver":                     true, // database/sql/driver.Connector
+	"ECDH":                       true, // crypto/ecdh.KeyExchanger
+	"Elem":                       true, // reflect.Type
+	"Enabled":                    true, // log/slog.Handler
+	"Encapsulate":                true, // crypto.Encapsulator
+	"Encapsulator":               true, // crypto.Decapsulator
+	"Encrypt":                    true, // crypto/cipher.Block
+	"End":                        true, // go/ast.Node
+	"Err":                        true, // context.Context
+	"Error":                      true, // error
+	"Eval":                       true, // go/build/constraint.Expr
+	"ExactString":                true, // go/constant.Value
+	"Exec":                       true, // database/sql/driver.Execer
+	"ExecContext":                true, // database/sql/driver.ExecerContext
+	"Exported":                   true, // go/types.Object
+	"Field":                      true, // reflect.Type
+	"FieldAlign":                 true, // reflect.Type
+	"FieldByIndex":               true, // reflect.Type
+	"FieldByName":                true, // reflect.Type
+	"FieldByNameFunc":            true, // reflect.Type
+	"Fields":                     true, // reflect.Type
+	"Flag":                       true, // fmt.State
+	"Flush":                      true, // net/http.Flusher
+	"Format":                     true, // fmt.Formatter
+	"Generate":                   true, // testing/quick.Generator
+	"GenerateKey":                true, // crypto/ecdh.Curve
+	"Glob":                       true, // io/fs.GlobFS
+	"GoString":                   true, // fmt.GoStringer
+	"GobDecode":                  true, // encoding/gob.GobDecoder
+	"GobEncode":                  true, // encoding/gob.GobEncoder
+	"Handle":                     true, // log/slog.Handler
+	"HasNextResultSet":           true, // database/sql/driver.RowsNextResultSet
+	"HashFunc":                   true, // crypto.SignerOpts
+	"Header":                     true, // net/http.ResponseWriter
+	"Hijack":                     true, // net/http.Hijacker
+	"ID":                         true, // crypto/hpke.AEAD
+	"Id":                         true, // go/types.Object
+	"Implements":                 true, // reflect.Type
+	"Import":                     true, // go/types.Importer
+	"ImportFrom":                 true, // go/types.ImporterFrom
+	"In":                         true, // reflect.Type
+	"Info":                       true, // io/fs.DirEntry
+	"Ins":                        true, // reflect.Type
+	"Int63":                      true, // math/rand.Source
+	"IsDir":                      true, // io/fs.DirEntry, io/fs.FileInfo
+	"IsOnCurve":                  true, // crypto/elliptic.Curve
+	"IsValid":                    true, // database/sql/driver.Validator
+	"IsVariadic":                 true, // reflect.Type
+	"Key":                        true, // reflect.Type
+	"Kind":                       true, // go/constant.Value, reflect.Type
+	"LastInsertId":               true, // database/sql.Result
+	"Len":                        true, // sort.Interface, reflect.Type
+	"Less":                       true, // sort.Interface
+	"Level":                      true, // log/slog.Leveler
+	"LocalAddr":                  true, // net.Conn, net.PacketConn
+	"Lock":                       true, // sync.Locker
+	"LogValue":                   true, // log/slog.LogValuer
+	"Lstat":                      true, // io/fs.ReadLinkFS
+	"MarshalBinary":              true, // encoding.BinaryMarshaler
+	"MarshalJSON":                true, // encoding/json.Marshaler
+	"MarshalJSONTo":              true, // encoding/json/v2.MarshalerTo
+	"MarshalText":                true, // encoding.TextMarshaler
+	"MarshalXML":                 true, // encoding/xml.Marshaler
+	"MarshalXMLAttr":             true, // encoding/xml.MarshalerAttr
+	"Match":                      true, // regexp.MatchString pattern
+	"MatchString":                true, // regexp pattern
+	"Method":                     true, // reflect.Type
+	"MethodByName":               true, // reflect.Type
+	"Methods":                    true, // reflect.Type
+	"ModTime":                    true, // io/fs.FileInfo
+	"Mode":                       true, // io/fs.FileInfo
+	"Name":                       true, // io/fs.DirEntry, io/fs.FileInfo, reflect.Type
+	"Network":                    true, // net.Addr
+	"NewPrivateKey":              true, // crypto/ecdh.Curve
+	"NewPublicKey":               true, // crypto/ecdh.Curve
+	"Next":                       true, // database/sql/driver.Rows, net/smtp.Auth
+	"NextResultSet":              true, // database/sql/driver.RowsNextResultSet
+	"NonceSize":                  true, // crypto/cipher.AEAD
+	"NumField":                   true, // reflect.Type
+	"NumIn":                      true, // reflect.Type
+	"NumInput":                   true, // database/sql/driver.Stmt
+	"NumMethod":                  true, // reflect.Type
+	"NumOut":                     true, // reflect.Type
+	"Offsetsof":                  true, // go/types.Sizes
+	"Open":                       true, // io/fs.FS, net/http.FileSystem
+	"OpenConnector":              true, // database/sql/driver.DriverContext
+	"Out":                        true, // reflect.Type
+	"Outs":                       true, // reflect.Type
+	"OverflowComplex":            true, // reflect.Type
+	"OverflowFloat":              true, // reflect.Type
+	"OverflowInt":                true, // reflect.Type
+	"OverflowUint":               true, // reflect.Type
+	"Overhead":                   true, // crypto/cipher.AEAD
+	"Params":                     true, // crypto/elliptic.Curve
+	"Parent":                     true, // go/types.Object
+	"Ping":                       true, // database/sql/driver.Pinger
+	"Pkg":                        true, // go/types.Object
+	"PkgPath":                    true, // reflect.Type
+	"Pop":                        true, // container/heap.Interface
+	"Pos":                        true, // go/ast.Node, go/types.Object
+	"Position":                   true, // text/template/parse.Node
+	"Precision":                  true, // fmt.State
+	"Prepare":                    true, // database/sql/driver.Conn
+	"PrepareContext":             true, // database/sql/driver.ConnPrepareContext
+	"Public":                     true, // crypto.Decrypter, crypto.Signer
+	"PublicKey":                  true, // crypto/ecdh.KeyExchanger
+	"PublicSuffix":               true, // net/http/cookiejar.PublicSuffixList
+	"Push":                       true, // container/heap.Interface, net/http.Pusher
+	"Put":                        true, // crypto/tls.ClientSessionCache
+	"PutUint16":                  true, // encoding/binary.ByteOrder
+	"PutUint32":                  true, // encoding/binary.ByteOrder
+	"PutUint64":                  true, // encoding/binary.ByteOrder
+	"Quantize":                   true, // image/draw.Quantizer
+	"Query":                      true, // database/sql/driver.Queryer
+	"QueryContext":               true, // database/sql/driver.QueryerContext
+	"RGBA":                       true, // image/color.Color
+	"RGBA64At":                   true, // image.RGBA64Image
+	"Read":                       true, // io.Reader, io/fs.File, net.Conn
+	"ReadAt":                     true, // io.ReaderAt
+	"ReadByte":                   true, // io.ByteReader
+	"ReadDir":                    true, // io/fs.ReadDirFS, io/fs.ReadDirFile
+	"ReadFile":                   true, // io/fs.ReadFileFS
+	"ReadFrom":                   true, // io.ReaderFrom, net.PacketConn
+	"ReadLink":                   true, // io/fs.ReadLinkFS
+	"ReadRequestBody":            true, // net/rpc.ServerCodec
+	"ReadRequestHeader":          true, // net/rpc.ServerCodec
+	"ReadResponseBody":           true, // net/rpc.ClientCodec
+	"ReadResponseHeader":         true, // net/rpc.ClientCodec
+	"ReadRune":                   true, // io.RuneReader
+	"Readdir":                    true, // net/http.File
+	"RemoteAddr":                 true, // net.Conn
+	"Reset":                      true, // hash.Hash, compress/flate.Resetter
+	"ResetSession":               true, // database/sql/driver.SessionResetter
+	"Rollback":                   true, // database/sql/driver.Tx
+	"RoundTrip":                  true, // net/http.RoundTripper
+	"RowsAffected":               true, // database/sql.Result
+	"RuntimeError":               true, // runtime.Error
+	"ScalarBaseMult":             true, // crypto/elliptic.Curve
+	"ScalarMult":                 true, // crypto/elliptic.Curve
+	"Scan":                       true, // database/sql.Scanner, fmt.Scanner
+	"Seal":                       true, // crypto/cipher.AEAD
+	"Seed":                       true, // math/rand.Source
+	"Seek":                       true, // io.Seeker
+	"ServeHTTP":                  true, // net/http.Handler
+	"Set":                        true, // flag.Value, image/draw.Image
+	"SetCookies":                 true, // net/http.CookieJar
+	"SetDeadline":                true, // net.Conn, net.PacketConn
+	"SetRGBA64":                  true, // image/draw.RGBA64Image
+	"SetReadDeadline":            true, // net.Conn, net.PacketConn
+	"SetWriteDeadline":           true, // net.Conn, net.PacketConn
+	"Sign":                       true, // crypto.Signer
+	"SignMessage":                true, // crypto.MessageSigner
+	"Signal":                     true, // os.Signal
+	"Size":                       true, // hash.Hash, io/fs.FileInfo, reflect.Type
+	"Sizeof":                     true, // go/types.Sizes
+	"SkipSpace":                  true, // fmt.ScanState
+	"Start":                      true, // net/smtp.Auth
+	"Stat":                       true, // io/fs.File, io/fs.StatFS, net/http.File
+	"String":                     true, // fmt.Stringer
+	"Sub":                        true, // io/fs.SubFS
+	"Sum":                        true, // hash.Hash
+	"Sum32":                      true, // hash.Hash32
+	"Sum64":                      true, // hash.Hash64
+	"Swap":                       true, // sort.Interface
+	"Sys":                        true, // io/fs.FileInfo
+	"SyscallConn":                true, // syscall.Conn
+	"Temporary":                  true, // net.Error
+	"Timeout":                    true, // net.Error
+	"Token":                      true, // encoding/xml.TokenReader, fmt.ScanState
+	"Type":                       true, // go/types.Object, io/fs.DirEntry
+	"Uint16":                     true, // encoding/binary.ByteOrder
+	"Uint32":                     true, // encoding/binary.ByteOrder
+	"Uint64":                     true, // encoding/binary.ByteOrder, math/rand.Source64
+	"Underlying":                 true, // go/types.Type
+	"Unlock":                     true, // sync.Locker
+	"UnmarshalBinary":            true, // encoding.BinaryUnmarshaler
+	"UnmarshalJSON":              true, // encoding/json.Unmarshaler
+	"UnmarshalJSONFrom":          true, // encoding/json/v2.UnmarshalerFrom
+	"UnmarshalText":              true, // encoding.TextUnmarshaler
+	"UnmarshalXML":               true, // encoding/xml.Unmarshaler
+	"UnmarshalXMLAttr":           true, // encoding/xml.UnmarshalerAttr
+	"UnreadByte":                 true, // io.ByteScanner
+	"UnreadRune":                 true, // io.RuneScanner
+	"Unwrap":                     true, // errors
+	"Value":                      true, // context.Context, database/sql/driver.Valuer
+	"Visit":                      true, // go/ast.Visitor
+	"Width":                      true, // fmt.State
+	"WithAttrs":                  true, // log/slog.Handler
+	"WithGroup":                  true, // log/slog.Handler
+	"Write":                      true, // io.Writer, net.Conn, net/http.ResponseWriter
+	"WriteAt":                    true, // io.WriterAt
+	"WriteByte":                  true, // io.ByteWriter
+	"WriteHeader":                true, // net/http.ResponseWriter
+	"WriteRequest":               true, // net/rpc.ClientCodec
+	"WriteResponse":              true, // net/rpc.ServerCodec
+	"WriteString":                true, // io.StringWriter
+	"WriteTo":                    true, // io.WriterTo, net.PacketConn
+	"XORKeyStream":               true, // crypto/cipher.Stream
 
-	// error
-	"Error":  true,
-	"Unwrap": true,
-
-	// encoding/json
-	"MarshalJSON":   true,
-	"UnmarshalJSON": true,
-
-	// encoding
-	"MarshalText":     true,
-	"UnmarshalText":   true,
-	"MarshalBinary":   true,
-	"UnmarshalBinary": true,
-
-	// io
-	"Read":     true,
-	"Write":    true,
-	"Close":    true,
-	"ReadAt":   true,
-	"WriteAt":  true,
-	"Seek":     true,
-	"ReadFrom": true,
-	"WriteTo":  true,
-
-	// sort.Interface
-	"Len":  true,
-	"Less": true,
-	"Swap": true,
-
-	// net/http
-	"ServeHTTP": true,
-
-	// database/sql
-	"Value": true,
-	"Scan":  true,
-
-	// context
-	"Deadline": true,
-	"Done":     true,
-	"Err":      true,
-
-	// encoding/xml
-	"MarshalXML":       true,
-	"UnmarshalXML":     true,
-	"MarshalXMLAttr":   true,
-	"UnmarshalXMLAttr": true,
-
-	// flag.Value
-	"Set": true,
-
-	// proto
+	// proto (commonly used non-stdlib)
 	"ProtoMessage":     true,
 	"ProtoReflect":     true,
-	"Reset":            true,
 	"MarshalLogObject": true,
 	"MarshalLogArray":  true,
 }
