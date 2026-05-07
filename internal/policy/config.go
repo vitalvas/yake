@@ -173,9 +173,11 @@ func (p *TestDurationPolicy) getMaxDuration() time.Duration {
 }
 
 type CoveragePolicy struct {
-	Enabled               *bool    `yaml:"enable"`
-	MinCoverage           *float64 `yaml:"min_coverage"`
-	MaxUncoveredFuncLines *int     `yaml:"max_uncovered_func_lines"`
+	Enabled               *bool              `yaml:"enable"`
+	MinCoverage           *float64           `yaml:"min_coverage"`
+	MaxUncoveredFuncLines *int               `yaml:"max_uncovered_func_lines"`
+	ExcludePackages       []string           `yaml:"exclude_packages"`
+	PackageOverrides      map[string]float64 `yaml:"package_overrides"`
 }
 
 func (p *CoveragePolicy) isEnabled() bool {
@@ -200,6 +202,22 @@ func (p *CoveragePolicy) getMaxUncoveredFuncLines() int {
 	}
 
 	return *p.MaxUncoveredFuncLines
+}
+
+func (p *CoveragePolicy) getExcludePackages() []string {
+	if p == nil {
+		return nil
+	}
+
+	return p.ExcludePackages
+}
+
+func (p *CoveragePolicy) getPackageOverrides() map[string]float64 {
+	if p == nil {
+		return nil
+	}
+
+	return p.PackageOverrides
 }
 
 func loadConfig() (*Config, error) {

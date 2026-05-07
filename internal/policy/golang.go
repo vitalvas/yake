@@ -101,7 +101,14 @@ func RunGolangChecks() error {
 	}
 
 	if cfg.Policy.Coverage.isEnabled() {
-		if err := checkCoverage(cfg.Policy.Coverage.getMinCoverage(), cfg.Policy.Coverage.getMaxUncoveredFuncLines()); err != nil {
+		covOpts := coverageOptions{
+			minCoverage:           cfg.Policy.Coverage.getMinCoverage(),
+			maxUncoveredFuncLines: cfg.Policy.Coverage.getMaxUncoveredFuncLines(),
+			excludePackages:       cfg.Policy.Coverage.getExcludePackages(),
+			packageOverrides:      cfg.Policy.Coverage.getPackageOverrides(),
+		}
+
+		if err := checkCoverage(covOpts); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
@@ -1895,7 +1902,7 @@ func isFuncCovered(blocks []coverBlock, fn funcInfo) bool {
 	return false
 }
 
-func findUncoveredLargeFunctions(profilePath string, maxUncoveredFuncLines int) ([]string, error) {
+func findUncoveredLargeFunctions(profilePath string, maxUncoveredFuncLines int, excludePackages []string) ([]string, error) {
 	goModData, err := os.ReadFile("go.mod")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read go.mod: %w", err)
@@ -1920,6 +1927,10 @@ func findUncoveredLargeFunctions(profilePath string, maxUncoveredFuncLines int) 
 		if info.IsDir() {
 			switch info.Name() {
 			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			if isDirExcluded(path, excludePackages) {
 				return filepath.SkipDir
 			}
 
@@ -2020,8 +2031,15 @@ func parseTestDurationOutput(data []byte, maxDuration time.Duration) []string {
 	return violations
 }
 
-func checkCoverage(minCoverage float64, maxUncoveredFuncLines int) error {
-	log.Printf("Checking code coverage (minimum %.0f%% per package)...", minCoverage)
+type coverageOptions struct {
+	minCoverage           float64
+	maxUncoveredFuncLines int
+	excludePackages       []string
+	packageOverrides      map[string]float64
+}
+
+func checkCoverage(opts coverageOptions) error {
+	log.Printf("Checking code coverage (minimum %.0f%% per package)...", opts.minCoverage)
 
 	tmpFile, err := os.CreateTemp("", "coverage-*.out")
 	if err != nil {
@@ -2050,12 +2068,12 @@ func checkCoverage(minCoverage float64, maxUncoveredFuncLines int) error {
 
 	modulePath := parseModulePath(string(goModData))
 
-	violations, err := parseCoverageOutput(stdout.String(), modulePath, minCoverage)
+	violations, err := parseCoverageOutput(stdout.String(), modulePath, opts)
 	if err != nil {
 		return err
 	}
 
-	funcViolations, err := findUncoveredLargeFunctions(tmpFile.Name(), maxUncoveredFuncLines)
+	funcViolations, err := findUncoveredLargeFunctions(tmpFile.Name(), opts.maxUncoveredFuncLines, opts.excludePackages)
 	if err != nil {
 		return err
 	}
@@ -2064,13 +2082,13 @@ func checkCoverage(minCoverage float64, maxUncoveredFuncLines int) error {
 
 	if len(violations) > 0 {
 		return fmt.Errorf("coverage violations (minimum %.0f%%):\n%s",
-			minCoverage, strings.Join(violations, "\n"))
+			opts.minCoverage, strings.Join(violations, "\n"))
 	}
 
 	return nil
 }
 
-func parseCoverageOutput(output, modulePath string, minCoverage float64) ([]string, error) {
+func parseCoverageOutput(output, modulePath string, opts coverageOptions) ([]string, error) {
 	var violations []string
 
 	coverageRegex := regexp.MustCompile(`ok\s+(\S+)\s+(?:[\d.]+s|\(cached\))\s+coverage:\s+([\d.]+)%`)
@@ -2084,19 +2102,29 @@ func parseCoverageOutput(output, modulePath string, minCoverage float64) ([]stri
 		if matches := coverageRegex.FindStringSubmatch(line); len(matches) == 3 {
 			pkgName := matches[1]
 
+			if isPackageExcluded(pkgName, modulePath, opts.excludePackages) {
+				continue
+			}
+
 			coverage, err := strconv.ParseFloat(matches[2], 64)
 			if err != nil {
 				continue
 			}
 
-			if coverage < minCoverage {
+			minCov := packageMinCoverage(pkgName, modulePath, opts.minCoverage, opts.packageOverrides)
+
+			if coverage < minCov {
 				violations = append(violations,
-					fmt.Sprintf("  - %s: %.1f%% coverage (minimum %.0f%%)", pkgName, coverage, minCoverage))
+					fmt.Sprintf("  - %s: %.1f%% coverage (minimum %.0f%%)", pkgName, coverage, minCov))
 			}
 		}
 
 		if matches := noCoverageRegex.FindStringSubmatch(line); len(matches) == 2 {
 			pkgName := matches[1]
+
+			if isPackageExcluded(pkgName, modulePath, opts.excludePackages) {
+				continue
+			}
 
 			dir := packageToDir(pkgName, modulePath)
 			if packageNeedsTests(dir) {
@@ -2120,6 +2148,44 @@ func packageToDir(pkgName, modulePath string) string {
 	}
 
 	return pkgName
+}
+
+func isPackageExcluded(pkgName, modulePath string, excludePackages []string) bool {
+	for _, pattern := range excludePackages {
+		fullPkg := fmt.Sprintf("%s/%s", modulePath, pattern)
+
+		if pkgName == fullPkg || strings.HasPrefix(pkgName, fmt.Sprintf("%s/", fullPkg)) {
+			return true
+		}
+
+		if pkgName == pattern || strings.HasPrefix(pkgName, fmt.Sprintf("%s/", pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isDirExcluded(dir string, excludePackages []string) bool {
+	for _, pattern := range excludePackages {
+		if dir == pattern || strings.HasPrefix(dir, fmt.Sprintf("%s/", pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func packageMinCoverage(pkgName, modulePath string, defaultMin float64, overrides map[string]float64) float64 {
+	for pattern, minCov := range overrides {
+		fullPkg := fmt.Sprintf("%s/%s", modulePath, pattern)
+
+		if pkgName == fullPkg || pkgName == pattern {
+			return minCov
+		}
+	}
+
+	return defaultMin
 }
 
 func packageNeedsTests(dir string) bool {

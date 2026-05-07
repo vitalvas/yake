@@ -8,42 +8,64 @@ Yet Another ToolKit -- a CLI tool for enforcing development standards and genera
 GOPRIVATE=github.com/vitalvas/yake go install -v github.com/vitalvas/yake@latest
 ```
 
-## Commands
+## Configuration
 
-### `yake tests`
+All policy settings are configured via `.yake.yaml` in the project root. Every field is optional -- defaults are applied when omitted.
 
-Runs a comprehensive testing and quality pipeline:
+```yaml
+policy:
+  entry_points:
+    enable: true              # default: true
+    max_main_lines: 25        # default: 25
 
-- `go fmt` -- format code
-- `go vet` -- static analysis
-- `go mod tidy -v` -- clean dependencies
-- `go test -cover ./...` -- test coverage
-- `go test -race ./...` -- race detector
-- `golangci-lint run` -- linting (if `.golangci.yml` exists)
-- `goreleaser check` -- release config validation (if `.goreleaser.yml` exists)
+  package_naming:
+    enable: true              # default: true
+    pattern: "^[0-9a-z]{3,32}$"  # default: ^[0-9a-z]{3,32}$
 
-### `yake policy run`
+  string_concat:
+    enable: true              # default: true
 
-Enforces project-wide policies for Go projects:
+  stdlib_wrappers:
+    enable: true              # default: true
 
-- **Entry point layout** -- root `main.go` and `cmd/**/main.go` must not coexist; entry point files may only contain `main()` (no `init()`, no helpers, max 25 lines)
-- **Package naming** -- package names must match `^[0-9a-z]{3,32}$` and match their directory name
-- **Test file naming** -- test files must follow `{origin}_test.go` or `{origin}_e2e_test.go` convention
-- **Code coverage** -- minimum 80% coverage per package; large functions (>25 lines) must have test coverage; packages without testable code (e.g., embed-only) are skipped
+  func_signature:
+    enable: true              # default: true
+    max_params: 5             # default: 5
+    max_results: 5            # default: 5
 
-#### Skip directives
+  composite_literal:
+    enable: true              # default: true
+    max_single_line_fields: 5 # default: 5
+
+  stuttering:
+    enable: true              # default: true
+
+  getter_naming:
+    enable: true              # default: true
+
+  private_exported_methods:
+    enable: true              # default: true
+
+  test_file_naming:
+    enable: true              # default: true
+
+  test_duration:
+    enable: true              # default: true
+    max_duration: "10s"       # default: 10s
+
+  coverage:
+    enable: true              # default: true
+    min_coverage: 80.0        # default: 80.0
+    max_uncovered_func_lines: 25  # default: 25
+    exclude_packages:         # packages excluded from all coverage checks
+      - internal/cmd
+      - internal/generated
+    package_overrides:        # per-package minimum coverage (overrides min_coverage)
+      internal/database: 50.0
+      internal/cli: 40.0
+```
+
+### Skip directives
 
 - `//yake:skip-test` before the `package` declaration skips test requirements for the entire file
 - `//yake:skip-test` above a function declaration skips coverage requirements for that function
-
-### `yake code`
-
-Generates project configurations:
-
-| Subcommand | Description |
-|---|---|
-| `defaults` | Apply default project configurations (e.g., `.golangci.yml`) |
-| `linter-new --lang go` | Create a new linter configuration |
-| `github-dependabot --lang go` | Generate `.github/dependabot.yml` |
-| `github-release-please` | Generate Release Please workflow and config |
-| `github-lang-golang` | Generate GitHub Actions CI workflow for Go |

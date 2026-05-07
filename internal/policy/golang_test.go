@@ -1956,7 +1956,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines, nil)
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
 		assert.Contains(t, violations[0], "BigProcess")
@@ -1982,7 +1982,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines, nil)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -2004,7 +2004,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines, nil)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -2026,7 +2026,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines, nil)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -2048,7 +2048,7 @@ func Test_findUncoveredLargeFunctions(t *testing.T) {
 		profilePath := filepath.Join(tmpDir, "cover.out")
 		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
 
-		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines)
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines, nil)
 		require.NoError(t, err)
 		assert.Empty(t, violations)
 	})
@@ -2122,7 +2122,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("parses coverage above threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 85.0% of statements"
 
-		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
+		violations, err := parseCoverageOutput(output, "", coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -2131,7 +2131,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("detects coverage below threshold", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t0.005s\tcoverage: 50.0% of statements"
 
-		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
+		violations, err := parseCoverageOutput(output, "", coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -2142,7 +2142,7 @@ func Test_parseCoverageOutput(t *testing.T) {
 	t.Run("detects no test files", func(t *testing.T) {
 		output := "?\tgithub.com/example/nopkg\t[no test files]"
 
-		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
+		violations, err := parseCoverageOutput(output, "", coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -2156,14 +2156,14 @@ ok  	github.com/example/pkg2	0.003s	coverage: 75.0% of statements
 ?	github.com/example/pkg3	[no test files]
 ok  	github.com/example/pkg4	0.002s	coverage: 100.0% of statements`
 
-		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
+		violations, err := parseCoverageOutput(output, "", coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		assert.Len(t, violations, 2)
 	})
 
 	t.Run("handles empty output", func(t *testing.T) {
-		violations, err := parseCoverageOutput("", "", defaultMinCoverage)
+		violations, err := parseCoverageOutput("", "", coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -2172,7 +2172,7 @@ ok  	github.com/example/pkg4	0.002s	coverage: 100.0% of statements`
 	t.Run("handles cached coverage output", func(t *testing.T) {
 		output := "ok  \tgithub.com/example/pkg\t(cached)\tcoverage: 75.0% of statements"
 
-		violations, err := parseCoverageOutput(output, "", defaultMinCoverage)
+		violations, err := parseCoverageOutput(output, "", coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		require.Len(t, violations, 1)
@@ -2201,7 +2201,7 @@ var FS embed.FS
 
 		os.Chdir(tmpDir)
 
-		violations, err := parseCoverageOutput(output, modulePath, defaultMinCoverage)
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
@@ -2235,10 +2235,231 @@ func LargeFunction() string {
 
 		os.Chdir(tmpDir)
 
-		violations, err := parseCoverageOutput(output, modulePath, defaultMinCoverage)
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{minCoverage: defaultMinCoverage})
 
 		require.NoError(t, err)
 		assert.Empty(t, violations)
+	})
+}
+
+func Test_isPackageExcluded(t *testing.T) {
+	modulePath := "github.com/example/myapp"
+
+	t.Run("excludes exact match with relative path", func(t *testing.T) {
+		excluded := isPackageExcluded("github.com/example/myapp/internal/cmd", modulePath, []string{"internal/cmd"})
+		assert.True(t, excluded)
+	})
+
+	t.Run("excludes subpackage", func(t *testing.T) {
+		excluded := isPackageExcluded("github.com/example/myapp/internal/cmd/sub", modulePath, []string{"internal/cmd"})
+		assert.True(t, excluded)
+	})
+
+	t.Run("does not exclude non-matching package", func(t *testing.T) {
+		excluded := isPackageExcluded("github.com/example/myapp/internal/service", modulePath, []string{"internal/cmd"})
+		assert.False(t, excluded)
+	})
+
+	t.Run("does not exclude partial prefix match", func(t *testing.T) {
+		excluded := isPackageExcluded("github.com/example/myapp/internal/cmdutils", modulePath, []string{"internal/cmd"})
+		assert.False(t, excluded)
+	})
+
+	t.Run("excludes with full package path", func(t *testing.T) {
+		excluded := isPackageExcluded("github.com/example/myapp/internal/db", modulePath, []string{"github.com/example/myapp/internal/db"})
+		assert.True(t, excluded)
+	})
+
+	t.Run("returns false with empty exclude list", func(t *testing.T) {
+		excluded := isPackageExcluded("github.com/example/myapp/internal/cmd", modulePath, nil)
+		assert.False(t, excluded)
+	})
+
+	t.Run("handles multiple exclude patterns", func(t *testing.T) {
+		excludes := []string{"internal/cmd", "internal/database"}
+		assert.True(t, isPackageExcluded("github.com/example/myapp/internal/cmd", modulePath, excludes))
+		assert.True(t, isPackageExcluded("github.com/example/myapp/internal/database", modulePath, excludes))
+		assert.False(t, isPackageExcluded("github.com/example/myapp/internal/service", modulePath, excludes))
+	})
+}
+
+func Test_isDirExcluded(t *testing.T) {
+	t.Run("excludes exact match", func(t *testing.T) {
+		assert.True(t, isDirExcluded("internal/cmd", []string{"internal/cmd"}))
+	})
+
+	t.Run("excludes subdirectory", func(t *testing.T) {
+		assert.True(t, isDirExcluded("internal/cmd/sub", []string{"internal/cmd"}))
+	})
+
+	t.Run("does not exclude non-matching directory", func(t *testing.T) {
+		assert.False(t, isDirExcluded("internal/service", []string{"internal/cmd"}))
+	})
+
+	t.Run("does not exclude partial prefix", func(t *testing.T) {
+		assert.False(t, isDirExcluded("internal/cmdutils", []string{"internal/cmd"}))
+	})
+
+	t.Run("returns false with empty exclude list", func(t *testing.T) {
+		assert.False(t, isDirExcluded("internal/cmd", nil))
+	})
+}
+
+func Test_packageMinCoverage(t *testing.T) {
+	modulePath := "github.com/example/myapp"
+
+	t.Run("returns default when no overrides", func(t *testing.T) {
+		assert.Equal(t, 80.0, packageMinCoverage("github.com/example/myapp/internal/cmd", modulePath, 80.0, nil))
+	})
+
+	t.Run("returns override for matching relative path", func(t *testing.T) {
+		overrides := map[string]float64{"internal/cmd": 40.0}
+		assert.Equal(t, 40.0, packageMinCoverage("github.com/example/myapp/internal/cmd", modulePath, 80.0, overrides))
+	})
+
+	t.Run("returns override for matching full path", func(t *testing.T) {
+		overrides := map[string]float64{"github.com/example/myapp/internal/cmd": 40.0}
+		assert.Equal(t, 40.0, packageMinCoverage("github.com/example/myapp/internal/cmd", modulePath, 80.0, overrides))
+	})
+
+	t.Run("returns default for non-matching package", func(t *testing.T) {
+		overrides := map[string]float64{"internal/cmd": 40.0}
+		assert.Equal(t, 80.0, packageMinCoverage("github.com/example/myapp/internal/service", modulePath, 80.0, overrides))
+	})
+}
+
+func Test_parseCoverageOutput_excludePackages(t *testing.T) {
+	modulePath := "github.com/example/myapp"
+
+	t.Run("excludes package from coverage check", func(t *testing.T) {
+		output := "ok  \tgithub.com/example/myapp/internal/cmd\t0.005s\tcoverage: 42.0% of statements"
+
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{
+			minCoverage:     defaultMinCoverage,
+			excludePackages: []string{"internal/cmd"},
+		})
+
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("excludes package from no test files check", func(t *testing.T) {
+		output := "?\tgithub.com/example/myapp/internal/cmd\t[no test files]"
+
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{
+			minCoverage:     defaultMinCoverage,
+			excludePackages: []string{"internal/cmd"},
+		})
+
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("still reports non-excluded packages", func(t *testing.T) {
+		output := `ok  	github.com/example/myapp/internal/cmd	0.005s	coverage: 42.0% of statements
+ok  	github.com/example/myapp/internal/service	0.003s	coverage: 50.0% of statements`
+
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{
+			minCoverage:     defaultMinCoverage,
+			excludePackages: []string{"internal/cmd"},
+		})
+
+		require.NoError(t, err)
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "internal/service")
+	})
+
+	t.Run("uses package override for specific package", func(t *testing.T) {
+		output := "ok  \tgithub.com/example/myapp/internal/cmd\t0.005s\tcoverage: 42.0% of statements"
+
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{
+			minCoverage:      defaultMinCoverage,
+			packageOverrides: map[string]float64{"internal/cmd": 40.0},
+		})
+
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("package override below coverage reports violation", func(t *testing.T) {
+		output := "ok  \tgithub.com/example/myapp/internal/cmd\t0.005s\tcoverage: 42.0% of statements"
+
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{
+			minCoverage:      defaultMinCoverage,
+			packageOverrides: map[string]float64{"internal/cmd": 50.0},
+		})
+
+		require.NoError(t, err)
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "42.0%")
+		assert.Contains(t, violations[0], "minimum 50%")
+	})
+
+	t.Run("non-overridden package uses default minimum", func(t *testing.T) {
+		output := `ok  	github.com/example/myapp/internal/cmd	0.005s	coverage: 42.0% of statements
+ok  	github.com/example/myapp/internal/service	0.003s	coverage: 50.0% of statements`
+
+		violations, err := parseCoverageOutput(output, modulePath, coverageOptions{
+			minCoverage:      defaultMinCoverage,
+			packageOverrides: map[string]float64{"internal/cmd": 40.0},
+		})
+
+		require.NoError(t, err)
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "internal/service")
+	})
+}
+
+func Test_findUncoveredLargeFunctions_excludePackages(t *testing.T) {
+	t.Run("excludes directory from uncovered function check", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		goMod := "module testproject\n\ngo 1.21\n"
+		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
+
+		pkgDir := filepath.Join(tmpDir, "internal", "cmd")
+		require.NoError(t, os.MkdirAll(pkgDir, 0755))
+
+		code := fmt.Sprintf("package cmd\n\n%s", generateLargeFunc("BigProcess", 30))
+		require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "service.go"), []byte(code), 0644))
+
+		profile := "mode: set\n"
+		profilePath := filepath.Join(tmpDir, "cover.out")
+		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
+
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines, []string{"internal/cmd"})
+		require.NoError(t, err)
+		assert.Empty(t, violations)
+	})
+
+	t.Run("reports when directory is not excluded", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		goMod := "module testproject\n\ngo 1.21\n"
+		require.NoError(t, os.WriteFile("go.mod", []byte(goMod), 0644))
+
+		pkgDir := filepath.Join(tmpDir, "internal", "cmd")
+		require.NoError(t, os.MkdirAll(pkgDir, 0755))
+
+		code := fmt.Sprintf("package cmd\n\n%s", generateLargeFunc("BigProcess", 30))
+		require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "service.go"), []byte(code), 0644))
+
+		profile := "mode: set\n"
+		profilePath := filepath.Join(tmpDir, "cover.out")
+		require.NoError(t, os.WriteFile(profilePath, []byte(profile), 0644))
+
+		violations, err := findUncoveredLargeFunctions(profilePath, defaultMaxUncoveredFuncLines, nil)
+		require.NoError(t, err)
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "BigProcess")
 	})
 }
 
@@ -2878,7 +3099,7 @@ func Test_checkCoverage(t *testing.T) {
 
 		createTestGoProject(t, tmpDir, 100)
 
-		err := checkCoverage(defaultMinCoverage, defaultMaxUncoveredFuncLines)
+		err := checkCoverage(coverageOptions{minCoverage: defaultMinCoverage, maxUncoveredFuncLines: defaultMaxUncoveredFuncLines})
 		assert.NoError(t, err)
 	})
 
@@ -2891,7 +3112,7 @@ func Test_checkCoverage(t *testing.T) {
 
 		createTestGoProject(t, tmpDir, 50)
 
-		err := checkCoverage(defaultMinCoverage, defaultMaxUncoveredFuncLines)
+		err := checkCoverage(coverageOptions{minCoverage: defaultMinCoverage, maxUncoveredFuncLines: defaultMaxUncoveredFuncLines})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "coverage violations")
 	})
@@ -2905,7 +3126,7 @@ func Test_checkCoverage(t *testing.T) {
 
 		createTestGoProjectWithLargeFunc(t, tmpDir)
 
-		err := checkCoverage(defaultMinCoverage, defaultMaxUncoveredFuncLines)
+		err := checkCoverage(coverageOptions{minCoverage: defaultMinCoverage, maxUncoveredFuncLines: defaultMaxUncoveredFuncLines})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no test coverage")
 		assert.Contains(t, err.Error(), "BigUntested")

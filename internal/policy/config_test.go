@@ -102,6 +102,50 @@ func Test_loadConfig(t *testing.T) {
 		assert.Contains(t, err.Error(), "test_duration.max_duration")
 	})
 
+	t.Run("parses coverage exclude packages", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := `policy:
+  coverage:
+    exclude_packages:
+      - internal/cmd
+      - internal/database
+`
+		require.NoError(t, os.WriteFile(configFile, []byte(content), 0644))
+
+		cfg, err := loadConfig()
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{"internal/cmd", "internal/database"}, cfg.Policy.Coverage.ExcludePackages)
+	})
+
+	t.Run("parses coverage package overrides", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		content := `policy:
+  coverage:
+    min_coverage: 80.0
+    package_overrides:
+      internal/cmd: 40.0
+      internal/database: 50.0
+`
+		require.NoError(t, os.WriteFile(configFile, []byte(content), 0644))
+
+		cfg, err := loadConfig()
+
+		require.NoError(t, err)
+		assert.Equal(t, 80.0, *cfg.Policy.Coverage.MinCoverage)
+		assert.Equal(t, map[string]float64{"internal/cmd": 40.0, "internal/database": 50.0}, cfg.Policy.Coverage.PackageOverrides)
+	})
+
 	t.Run("returns error on invalid regex pattern", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
@@ -242,6 +286,30 @@ func Test_CoveragePolicy(t *testing.T) {
 		}
 		assert.Equal(t, 60.0, p.getMinCoverage())
 		assert.Equal(t, 40, p.getMaxUncoveredFuncLines())
+	})
+
+	t.Run("nil returns empty exclude packages", func(t *testing.T) {
+		var p *CoveragePolicy
+		assert.Nil(t, p.getExcludePackages())
+	})
+
+	t.Run("returns configured exclude packages", func(t *testing.T) {
+		p := &CoveragePolicy{
+			ExcludePackages: []string{"internal/cmd", "internal/database"},
+		}
+		assert.Equal(t, []string{"internal/cmd", "internal/database"}, p.getExcludePackages())
+	})
+
+	t.Run("nil returns empty package overrides", func(t *testing.T) {
+		var p *CoveragePolicy
+		assert.Nil(t, p.getPackageOverrides())
+	})
+
+	t.Run("returns configured package overrides", func(t *testing.T) {
+		p := &CoveragePolicy{
+			PackageOverrides: map[string]float64{"internal/cmd": 40.0, "internal/database": 50.0},
+		}
+		assert.Equal(t, map[string]float64{"internal/cmd": 40.0, "internal/database": 50.0}, p.getPackageOverrides())
 	})
 }
 
