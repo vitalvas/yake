@@ -1,13 +1,17 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/spf13/cobra"
 )
+
+var taskTimeout = time.Minute
 
 func createTestsCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -70,11 +74,18 @@ func runGoTests() error {
 func runCommand(name string, args ...string) error {
 	log.Printf("Running: %v", append([]string{name}, args...))
 
-	cmd := exec.Command(name, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("task timed out after %s", taskTimeout)
+		}
+
 		return fmt.Errorf("failed to run %s: %w", append([]string{name}, args...), err)
 	}
 

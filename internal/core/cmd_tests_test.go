@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +28,17 @@ func Test_runCommand(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to run")
+	})
+
+	t.Run("returns error on timeout", func(t *testing.T) {
+		original := taskTimeout
+		taskTimeout = 100 * time.Millisecond
+		defer func() { taskTimeout = original }()
+
+		err := runCommand("sleep", "10")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "task timed out")
 	})
 }
 
