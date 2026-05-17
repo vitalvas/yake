@@ -36,6 +36,7 @@ type policyConfig struct {
 	Stuttering             *policyToggle           `yaml:"stuttering"`
 	GetterNaming           *policyToggle           `yaml:"getter_naming"`
 	PrivateExportedMethods *policyToggle           `yaml:"private_exported_methods"`
+	NoInit                 *policyToggle           `yaml:"no_init"`
 	TestFileNaming         *policyToggle           `yaml:"test_file_naming"`
 	TestDuration           *TestDurationPolicy     `yaml:"test_duration"`
 	Coverage               *CoveragePolicy         `yaml:"coverage"`

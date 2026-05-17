@@ -4600,3 +4600,131 @@ type baz int
 		assert.False(t, types["Bar"])
 	})
 }
+
+func Test_checkNoInit(t *testing.T) {
+	t.Run("detects init function", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/cfg", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/cfg/cfg.go", []byte(`package cfg
+
+func init() {
+	_ = 1
+}
+`), 0644))
+
+		err := checkNoInit()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "init() function is forbidden")
+		assert.Contains(t, err.Error(), "internal/cfg/cfg.go")
+	})
+
+	t.Run("allows files without init", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/cfg", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/cfg/cfg.go", []byte(`package cfg
+
+func Load() error {
+	return nil
+}
+`), 0644))
+
+		err := checkNoInit()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("ignores test files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/cfg", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/cfg/cfg_test.go", []byte(`package cfg
+
+func init() {
+	_ = 1
+}
+`), 0644))
+
+		err := checkNoInit()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("ignores method named init", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/cfg", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/cfg/cfg.go", []byte(`package cfg
+
+type srv struct{}
+
+func (s *srv) init() {}
+`), 0644))
+
+		err := checkNoInit()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("respects file skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/cfg", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/cfg/cfg.go", []byte(`//yake:skip-test
+package cfg
+
+func init() {}
+`), 0644))
+
+		err := checkNoInit()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("respects per-function skip directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("internal/cfg", 0755))
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n"), 0644))
+		require.NoError(t, os.WriteFile("internal/cfg/cfg.go", []byte(`package cfg
+
+//yake:skip-test
+func init() {}
+`), 0644))
+
+		err := checkNoInit()
+
+		assert.NoError(t, err)
+	})
+}

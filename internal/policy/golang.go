@@ -88,6 +88,12 @@ func RunGolangChecks() error {
 		}
 	}
 
+	if cfg.Policy.NoInit.isEnabled() {
+		if err := checkNoInit(); err != nil {
+			allErrors = append(allErrors, err.Error())
+		}
+	}
+
 	if cfg.Policy.TestFileNaming.isEnabled() {
 		if err := checkTestFileNaming(); err != nil {
 			allErrors = append(allErrors, err.Error())
@@ -1415,6 +1421,83 @@ func extractReceiverTypeName(fn *ast.FuncDecl) string {
 	}
 
 	return ""
+}
+
+func checkNoInit() error {
+	log.Println("Checking for init() functions...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		fileViolations := findInitViolations(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("init() function violations (init() is forbidden; use explicit constructors or wire setup from main()):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findInitViolations(filePath string) []string {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	if hasSkipDirective(filePath) {
+		return nil
+	}
+
+	var violations []string
+
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil || hasFuncSkipDirective(fn) {
+			continue
+		}
+
+		if fn.Name.Name != "init" {
+			continue
+		}
+
+		if countFields(fn.Type.Params) != 0 || countFields(fn.Type.Results) != 0 {
+			continue
+		}
+
+		pos := fset.Position(fn.Pos())
+		violations = append(violations,
+			fmt.Sprintf("  - %s:%d: init() function is forbidden", filePath, pos.Line))
+	}
+
+	return violations
 }
 
 func checkTestFileNaming() error {
