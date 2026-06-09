@@ -2055,7 +2055,11 @@ func findUncoveredLargeFunctions(profilePath string, maxUncoveredFuncLines int, 
 func checkTestDuration(maxDuration time.Duration) error {
 	log.Printf("Checking test duration (maximum %s per package)...", maxDuration)
 
-	cmd := exec.Command("go", "test", "-json", fmt.Sprintf("-timeout=%s", maxDuration), "./...")
+	// Do not pass -timeout=maxDuration here: that kills any package exceeding
+	// maxDuration before it emits a pass/fail event, so its real elapsed time is
+	// never measured and the violation is silently missed. Tests must run to
+	// completion so their actual duration can be compared against maxDuration.
+	cmd := exec.Command("go", "test", "-json", "./...")
 	cmd.Stderr = os.Stderr
 
 	out, err := cmd.Output()
