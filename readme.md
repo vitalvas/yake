@@ -72,10 +72,12 @@ policy:
 
 ### Build tags
 
-`tests.tags` lists Go build tags applied when running tests. Each tag is passed as a
-separate `-tags` flag to `go vet`, `go test -cover`, and `go test -race`. For example,
-`tags: [integration, e2e]` runs `go test -cover -tags=integration -tags=e2e ./...`. When
-no tags are configured, the commands run without `-tags`.
+`tests.tags` lists Go build tags applied when running tests. The untagged
+`go vet`, `go test -cover`, and `go test -race` run always executes. When tags are
+configured, an additional tagged pass runs on top, with each tag passed as a separate
+`-tags` flag, so both tagged and untagged code paths are exercised. For example,
+`tags: [integration, e2e]` runs the untagged pass followed by
+`go test -cover -tags=integration -tags=e2e ./...` (and the matching `vet`/`race`).
 
 ### Skip directives
 

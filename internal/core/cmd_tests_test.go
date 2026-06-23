@@ -57,6 +57,35 @@ func Test_goTagsArgs(t *testing.T) {
 	})
 }
 
+func Test_goTestCommands(t *testing.T) {
+	untagged := []command{
+		{name: "go", args: []string{"fmt", "./..."}},
+		{name: "go", args: []string{"vet", "./..."}},
+		{name: "go", args: []string{"mod", "tidy", "-v"}},
+		{name: "go", args: []string{"clean", "-testcache"}},
+		{name: "go", args: []string{"test", "-cover", "./..."}},
+		{name: "go", args: []string{"test", "-race", "./..."}},
+	}
+
+	t.Run("without tags runs only the untagged pass", func(t *testing.T) {
+		assert.Equal(t, untagged, goTestCommands(nil))
+	})
+
+	t.Run("with tags keeps the untagged pass and appends a tagged pass", func(t *testing.T) {
+		got := goTestCommands([]string{"integration", "e2e"})
+
+		// The untagged run must always come first, unchanged.
+		assert.Equal(t, untagged, got[:len(untagged)])
+
+		// Followed by an additional tagged vet/test/race pass.
+		assert.Equal(t, []command{
+			{name: "go", args: []string{"vet", "-tags=integration", "-tags=e2e", "./..."}},
+			{name: "go", args: []string{"test", "-cover", "-tags=integration", "-tags=e2e", "./..."}},
+			{name: "go", args: []string{"test", "-race", "-tags=integration", "-tags=e2e", "./..."}},
+		}, got[len(untagged):])
+	})
+}
+
 func Test_runGoTests(t *testing.T) {
 	t.Run("runs all commands in a valid go project", func(t *testing.T) {
 		tmpDir := t.TempDir()

@@ -65,21 +65,36 @@ func goTagsArgs(tags []string) []string {
 	return args
 }
 
-func runGoTests(tags []string) error {
-	tagsArgs := goTagsArgs(tags)
-
-	vetArgs := append([]string{"vet"}, tagsArgs...)
-	testArgs := append([]string{"test", "-cover"}, tagsArgs...)
-	raceArgs := append([]string{"test", "-race"}, tagsArgs...)
-
+// goTestCommands builds the Go command sequence. The untagged vet/test/race
+// run always executes; when build tags are configured an additional tagged
+// pass is appended so both tagged and untagged code paths are exercised.
+func goTestCommands(tags []string) []command {
 	commands := []command{
 		{name: "go", args: []string{"fmt", "./..."}},
-		{name: "go", args: append(vetArgs, "./...")},
+		{name: "go", args: []string{"vet", "./..."}},
 		{name: "go", args: []string{"mod", "tidy", "-v"}},
 		{name: "go", args: []string{"clean", "-testcache"}},
-		{name: "go", args: append(testArgs, "./...")},
-		{name: "go", args: append(raceArgs, "./...")},
+		{name: "go", args: []string{"test", "-cover", "./..."}},
+		{name: "go", args: []string{"test", "-race", "./..."}},
 	}
+
+	if tagsArgs := goTagsArgs(tags); len(tagsArgs) > 0 {
+		vetArgs := append(append([]string{"vet"}, tagsArgs...), "./...")
+		testArgs := append(append([]string{"test", "-cover"}, tagsArgs...), "./...")
+		raceArgs := append(append([]string{"test", "-race"}, tagsArgs...), "./...")
+
+		commands = append(commands,
+			command{name: "go", args: vetArgs},
+			command{name: "go", args: testArgs},
+			command{name: "go", args: raceArgs},
+		)
+	}
+
+	return commands
+}
+
+func runGoTests(tags []string) error {
+	commands := goTestCommands(tags)
 
 	if _, err := os.Stat(".golangci.yml"); err == nil {
 		commands = append(commands, command{name: "golangci-lint", args: []string{"run"}})
