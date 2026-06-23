@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/vitalvas/yake/internal/config"
 )
 
 var taskTimeout = time.Minute
@@ -18,8 +20,13 @@ func createTestsCommand() *cobra.Command {
 		Use:   "tests",
 		Short: "Run tests with coverage, race detection, and linting",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
 			if _, err := os.Stat("go.mod"); err == nil {
-				if err := runGoTests(); err != nil {
+				if err := runGoTests(cfg.Tests.Tags); err != nil {
 					return err
 				}
 			}
@@ -48,14 +55,30 @@ type command struct {
 	args []string
 }
 
-func runGoTests() error {
+// goTagsArgs returns a "-tags=<tag>" argument for each configured build tag.
+func goTagsArgs(tags []string) []string {
+	args := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		args = append(args, fmt.Sprintf("-tags=%s", tag))
+	}
+
+	return args
+}
+
+func runGoTests(tags []string) error {
+	tagsArgs := goTagsArgs(tags)
+
+	vetArgs := append([]string{"vet"}, tagsArgs...)
+	testArgs := append([]string{"test", "-cover"}, tagsArgs...)
+	raceArgs := append([]string{"test", "-race"}, tagsArgs...)
+
 	commands := []command{
 		{name: "go", args: []string{"fmt", "./..."}},
-		{name: "go", args: []string{"vet", "./..."}},
+		{name: "go", args: append(vetArgs, "./...")},
 		{name: "go", args: []string{"mod", "tidy", "-v"}},
 		{name: "go", args: []string{"clean", "-testcache"}},
-		{name: "go", args: []string{"test", "-cover", "./..."}},
-		{name: "go", args: []string{"test", "-race", "./..."}},
+		{name: "go", args: append(testArgs, "./...")},
+		{name: "go", args: append(raceArgs, "./...")},
 	}
 
 	if _, err := os.Stat(".golangci.yml"); err == nil {

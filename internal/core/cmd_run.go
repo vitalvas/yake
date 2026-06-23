@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/vitalvas/yake/internal/config"
 	"github.com/vitalvas/yake/internal/policy"
 )
 
@@ -13,8 +15,13 @@ func createRunCommand() *cobra.Command {
 		Use:   "run",
 		Short: "Run tests and policy checks",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
 			if _, err := os.Stat("go.mod"); err == nil {
-				if err := runGoTests(); err != nil {
+				if err := runGoTests(cfg.Tests.Tags); err != nil {
 					return err
 				}
 			}

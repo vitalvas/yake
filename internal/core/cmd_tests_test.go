@@ -42,6 +42,21 @@ func Test_runCommand(t *testing.T) {
 	})
 }
 
+func Test_goTagsArgs(t *testing.T) {
+	t.Run("empty tags returns no args", func(t *testing.T) {
+		assert.Empty(t, goTagsArgs(nil))
+		assert.Empty(t, goTagsArgs([]string{}))
+	})
+
+	t.Run("single tag", func(t *testing.T) {
+		assert.Equal(t, []string{"-tags=integration"}, goTagsArgs([]string{"integration"}))
+	})
+
+	t.Run("each tag becomes its own flag", func(t *testing.T) {
+		assert.Equal(t, []string{"-tags=integration", "-tags=e2e"}, goTagsArgs([]string{"integration", "e2e"}))
+	})
+}
+
 func Test_runGoTests(t *testing.T) {
 	t.Run("runs all commands in a valid go project", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -53,7 +68,22 @@ func Test_runGoTests(t *testing.T) {
 		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := runGoTests()
+		err := runGoTests(nil)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("runs with build tags", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		err := runGoTests([]string{"integration", "e2e"})
 
 		assert.NoError(t, err)
 	})
@@ -66,7 +96,7 @@ func Test_runGoTests(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// No go.mod means "go fmt ./..." will fail
-		err := runGoTests()
+		err := runGoTests(nil)
 
 		assert.Error(t, err)
 	})

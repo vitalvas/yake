@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vitalvas/yake/internal/config"
 )
 
 const (
@@ -27,91 +29,91 @@ const (
 func RunGolangChecks() error {
 	log.Println("Running Go policy checks...")
 
-	cfg, err := loadConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
 	var allErrors []string
 
-	if cfg.Policy.EntryPoints.isEnabled() {
-		if err := checkEntryPoints(cfg.Policy.EntryPoints.getMaxMainLines()); err != nil {
+	if enabled(cfg.Policy.EntryPoints) {
+		if err := checkEntryPoints(resolveMaxMainLines(cfg.Policy.EntryPoints)); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.PackageNaming.isEnabled() {
-		if err := checkPackageNaming(cfg.Policy.PackageNaming.getPattern()); err != nil {
+	if enabled(cfg.Policy.PackageNaming) {
+		if err := checkPackageNaming(resolvePackageNamingPattern(cfg.Policy.PackageNaming)); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.StringConcat.isEnabled() {
+	if enabled(cfg.Policy.StringConcat) {
 		if err := checkStringConcat(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.StdlibWrappers.isEnabled() {
+	if enabled(cfg.Policy.StdlibWrappers) {
 		if err := checkStdlibWrappers(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.FuncSignature.isEnabled() {
-		if err := checkFuncSignature(cfg.Policy.FuncSignature.getMaxParams(), cfg.Policy.FuncSignature.getMaxResults()); err != nil {
+	if enabled(cfg.Policy.FuncSignature) {
+		if err := checkFuncSignature(resolveMaxFuncParams(cfg.Policy.FuncSignature), resolveMaxFuncResults(cfg.Policy.FuncSignature)); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.CompositeLiteral.isEnabled() {
-		if err := checkCompositeLiteral(cfg.Policy.CompositeLiteral.getMaxSingleLineFields()); err != nil {
+	if enabled(cfg.Policy.CompositeLiteral) {
+		if err := checkCompositeLiteral(resolveMaxSingleLineFields(cfg.Policy.CompositeLiteral)); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.Stuttering.isEnabled() {
+	if enabled(cfg.Policy.Stuttering) {
 		if err := checkStuttering(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.GetterNaming.isEnabled() {
+	if enabled(cfg.Policy.GetterNaming) {
 		if err := checkGetterNaming(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.PrivateExportedMethods.isEnabled() {
+	if enabled(cfg.Policy.PrivateExportedMethods) {
 		if err := checkPrivateExportedMethods(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.NoInit.isEnabled() {
+	if enabled(cfg.Policy.NoInit) {
 		if err := checkNoInit(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.TestFileNaming.isEnabled() {
+	if enabled(cfg.Policy.TestFileNaming) {
 		if err := checkTestFileNaming(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.TestDuration.isEnabled() {
-		if err := checkTestDuration(cfg.Policy.TestDuration.getMaxDuration()); err != nil {
+	if enabled(cfg.Policy.TestDuration) {
+		if err := checkTestDuration(resolveMaxTestDuration(cfg.Policy.TestDuration)); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
 
-	if cfg.Policy.Coverage.isEnabled() {
+	if enabled(cfg.Policy.Coverage) {
 		covOpts := coverageOptions{
-			minCoverage:           cfg.Policy.Coverage.getMinCoverage(),
-			maxUncoveredFuncLines: cfg.Policy.Coverage.getMaxUncoveredFuncLines(),
-			excludePackages:       cfg.Policy.Coverage.getExcludePackages(),
-			packageOverrides:      cfg.Policy.Coverage.getPackageOverrides(),
+			minCoverage:           resolveMinCoverage(cfg.Policy.Coverage),
+			maxUncoveredFuncLines: resolveMaxUncoveredFuncLines(cfg.Policy.Coverage),
+			excludePackages:       resolveExcludePackages(cfg.Policy.Coverage),
+			packageOverrides:      resolvePackageOverrides(cfg.Policy.Coverage),
 		}
 
 		if err := checkCoverage(covOpts); err != nil {
@@ -124,6 +126,130 @@ func RunGolangChecks() error {
 	}
 
 	return nil
+}
+
+// enabled reports whether a policy section is active. A nil section or a nil
+// enable flag defaults to enabled.
+func enabled(p any) bool {
+	var flag *bool
+
+	switch v := p.(type) {
+	case *config.PolicyToggle:
+		if v != nil {
+			flag = v.Enabled
+		}
+	case *config.EntryPointsPolicy:
+		if v != nil {
+			flag = v.Enabled
+		}
+	case *config.PackageNamingPolicy:
+		if v != nil {
+			flag = v.Enabled
+		}
+	case *config.CompositeLiteralPolicy:
+		if v != nil {
+			flag = v.Enabled
+		}
+	case *config.FuncSignaturePolicy:
+		if v != nil {
+			flag = v.Enabled
+		}
+	case *config.TestDurationPolicy:
+		if v != nil {
+			flag = v.Enabled
+		}
+	case *config.CoveragePolicy:
+		if v != nil {
+			flag = v.Enabled
+		}
+	}
+
+	return flag == nil || *flag
+}
+
+func resolveMaxMainLines(p *config.EntryPointsPolicy) int {
+	if p == nil || p.MaxMainLines == nil {
+		return config.DefaultMaxMainLines
+	}
+
+	return *p.MaxMainLines
+}
+
+func resolvePackageNamingPattern(p *config.PackageNamingPolicy) string {
+	if p == nil || p.Pattern == nil {
+		return config.DefaultPackageNamingPattern
+	}
+
+	return *p.Pattern
+}
+
+func resolveMaxFuncParams(p *config.FuncSignaturePolicy) int {
+	if p == nil || p.MaxParams == nil {
+		return config.DefaultMaxFuncParams
+	}
+
+	return *p.MaxParams
+}
+
+func resolveMaxFuncResults(p *config.FuncSignaturePolicy) int {
+	if p == nil || p.MaxResults == nil {
+		return config.DefaultMaxFuncResults
+	}
+
+	return *p.MaxResults
+}
+
+func resolveMaxSingleLineFields(p *config.CompositeLiteralPolicy) int {
+	if p == nil || p.MaxSingleLineFields == nil {
+		return config.DefaultMaxSingleLineFields
+	}
+
+	return *p.MaxSingleLineFields
+}
+
+func resolveMaxTestDuration(p *config.TestDurationPolicy) time.Duration {
+	if p == nil || p.MaxDuration == nil {
+		return config.DefaultMaxTestDuration
+	}
+
+	d, err := time.ParseDuration(*p.MaxDuration)
+	if err != nil {
+		return config.DefaultMaxTestDuration
+	}
+
+	return d
+}
+
+func resolveMinCoverage(p *config.CoveragePolicy) float64 {
+	if p == nil || p.MinCoverage == nil {
+		return config.DefaultMinCoverage
+	}
+
+	return *p.MinCoverage
+}
+
+func resolveMaxUncoveredFuncLines(p *config.CoveragePolicy) int {
+	if p == nil || p.MaxUncoveredFuncLines == nil {
+		return config.DefaultMaxUncoveredFuncLines
+	}
+
+	return *p.MaxUncoveredFuncLines
+}
+
+func resolveExcludePackages(p *config.CoveragePolicy) []string {
+	if p == nil {
+		return nil
+	}
+
+	return p.ExcludePackages
+}
+
+func resolvePackageOverrides(p *config.CoveragePolicy) map[string]float64 {
+	if p == nil {
+		return nil
+	}
+
+	return p.PackageOverrides
 }
 
 func checkEntryPoints(maxMainLines int) error {

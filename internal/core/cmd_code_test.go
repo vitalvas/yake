@@ -17,6 +17,7 @@ func initTestGitRepo(t *testing.T, branch string) {
 
 	cmds := [][]string{
 		{"git", "init", "-b", branch},
+		{"git", "config", "core.hooksPath", "/dev/null"},
 		{"git", "config", "user.email", "test@test.com"},
 		{"git", "config", "user.name", "Test"},
 		{"git", "commit", "--allow-empty", "-m", "init"},

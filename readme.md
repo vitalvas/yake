@@ -10,9 +10,14 @@ GOPRIVATE=github.com/vitalvas/yake go install -v github.com/vitalvas/yake@latest
 
 ## Configuration
 
-All policy settings are configured via `.yake.yaml` in the project root. Every field is optional -- defaults are applied when omitted.
+All settings are configured via `.yake.yaml` in the project root. Every field is optional -- defaults are applied when omitted.
 
 ```yaml
+tests:
+  tags:                       # Go build tags applied to vet, test, and race runs
+    - integration
+    - e2e
+
 policy:
   entry_points:
     enable: true              # default: true
@@ -64,6 +69,13 @@ policy:
       internal/database: 50.0
       internal/cli: 40.0
 ```
+
+### Build tags
+
+`tests.tags` lists Go build tags applied when running tests. Each tag is passed as a
+separate `-tags` flag to `go vet`, `go test -cover`, and `go test -race`. For example,
+`tags: [integration, e2e]` runs `go test -cover -tags=integration -tags=e2e ./...`. When
+no tags are configured, the commands run without `-tags`.
 
 ### Skip directives
 
