@@ -8,8 +8,10 @@ import (
 
 type Config struct {
 	Version   int       `yaml:"version"`
+	Dist      string    `yaml:"dist"`
 	Before    Before    `yaml:"before"`
 	Builds    []Build   `yaml:"builds"`
+	UPX       []UPX     `yaml:"upx"`
 	Checksum  Checksum  `yaml:"checksum"`
 	Snapshot  Snapshot  `yaml:"snapshot"`
 	Changelog Changelog `yaml:"changelog"`
@@ -26,12 +28,22 @@ type Build struct {
 	Env     []string `yaml:"env"`
 	Goos    []string `yaml:"goos"`
 	Goarch  []string `yaml:"goarch"`
+	Flags   []string `yaml:"flags"`
 	Ldflags []string `yaml:"ldflags"`
 }
 
 type Checksum struct {
 	NameTemplate string `yaml:"name_template"`
 	Algorithm    string `yaml:"algorithm"`
+}
+
+type UPX struct {
+	Enabled  bool     `yaml:"enabled"`
+	IDs      []string `yaml:"ids"`
+	Goos     []string `yaml:"goos"`
+	Goarch   []string `yaml:"goarch"`
+	Compress string   `yaml:"compress"`
+	Lzma     bool     `yaml:"lzma"`
 }
 
 type Snapshot struct {
@@ -57,6 +69,7 @@ type ReleaseGitHub struct {
 func GetConfig(owner, repo string) Config {
 	return Config{
 		Version: 2,
+		Dist:    "_dist_build/",
 		Before: Before{
 			Hooks: []string{"go mod tidy"},
 		},
@@ -67,12 +80,23 @@ func GetConfig(owner, repo string) Config {
 				Env:    []string{"CGO_ENABLED=0"},
 				Goos:   []string{"linux"},
 				Goarch: []string{"amd64", "arm64"},
+				Flags:  []string{"-trimpath"},
 				Ldflags: []string{
 					"-s -w",
 					"-X main.version={{.Version}}",
 					"-X main.commit={{.Commit}}",
 					"-X main.date={{.Date}}",
 				},
+			},
+		},
+		UPX: []UPX{
+			{
+				Enabled:  true,
+				IDs:      []string{repo},
+				Goos:     []string{"linux"},
+				Goarch:   []string{"amd64", "arm64"},
+				Compress: "best",
+				Lzma:     true,
 			},
 		},
 		Checksum: Checksum{
