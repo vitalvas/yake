@@ -60,7 +60,7 @@ func goreleaserSteps() []WorkflowStep {
 	steps := []WorkflowStep{
 		{
 			Name: "Checkout code",
-			Uses: "actions/checkout@v6",
+			Uses: "actions/checkout@v7",
 			With: map[string]string{
 				"fetch-depth": "0",
 			},

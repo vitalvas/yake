@@ -21,7 +21,7 @@ func TestWorkflowMarshal(t *testing.T) {
 			Jobs: newSingleJob("build", WorkflowJob{
 				Name:   "Build",
 				RunsOn: "ubuntu-latest",
-				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v7"}},
 			}),
 		}
 
@@ -43,7 +43,7 @@ func TestWorkflowMarshal(t *testing.T) {
 			Jobs: newSingleJob("build", WorkflowJob{
 				Name:   "Build",
 				RunsOn: "ubuntu-latest",
-				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v7"}},
 			}),
 		}
 
@@ -54,7 +54,7 @@ func TestWorkflowMarshal(t *testing.T) {
 		assert.Contains(t, content, "name: test")
 		assert.Contains(t, content, "- main")
 		assert.Contains(t, content, "contents: read")
-		assert.Contains(t, content, "uses: actions/checkout@v4")
+		assert.Contains(t, content, "uses: actions/checkout@v7")
 	})
 
 	t.Run("omits empty permissions", func(t *testing.T) {
@@ -64,7 +64,7 @@ func TestWorkflowMarshal(t *testing.T) {
 			Jobs: newSingleJob("build", WorkflowJob{
 				Name:   "Build",
 				RunsOn: "ubuntu-latest",
-				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v7"}},
 			}),
 		}
 
@@ -80,7 +80,7 @@ func TestWorkflowMarshal(t *testing.T) {
 			Jobs: newSingleJob("build", WorkflowJob{
 				Name:   "Build",
 				RunsOn: "ubuntu-latest",
-				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v7"}},
 			}),
 		}
 
@@ -118,7 +118,7 @@ func TestWorkflowMarshal(t *testing.T) {
 	})
 
 	t.Run("omits empty step fields", func(t *testing.T) {
-		step := WorkflowStep{Uses: "actions/checkout@v4"}
+		step := WorkflowStep{Uses: "actions/checkout@v7"}
 
 		data, err := yaml.Marshal(step)
 		require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestWorkflowMarshal(t *testing.T) {
 			Jobs: newSingleJob("build", WorkflowJob{
 				Name:   "Build",
 				RunsOn: "ubuntu-latest",
-				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v7"}},
 			}),
 		}
 
@@ -160,7 +160,7 @@ func TestWorkflowMarshal(t *testing.T) {
 			},
 			Jobs: newSingleJob("build", WorkflowJob{
 				RunsOn: "ubuntu-latest",
-				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v7"}},
 			}),
 		}
 
@@ -203,7 +203,7 @@ func TestWorkflowMarshal(t *testing.T) {
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
 			Jobs: newSingleJob("build", WorkflowJob{
 				RunsOn: "ubuntu-latest",
-				Steps:  []WorkflowStep{{Uses: "actions/checkout@v4"}},
+				Steps:  []WorkflowStep{{Uses: "actions/checkout@v7"}},
 			}),
 		}
 
@@ -217,8 +217,8 @@ func TestWorkflowMarshal(t *testing.T) {
 			Name: "test",
 			On:   WorkflowOn{Push: &WorkflowTrigger{Branches: []string{"main"}}},
 			Jobs: OrderedJobs{
-				{Name: "first", Job: WorkflowJob{RunsOn: "ubuntu-latest", Steps: []WorkflowStep{{Uses: "actions/checkout@v4"}}}},
-				{Name: "second", Job: WorkflowJob{RunsOn: "ubuntu-latest", Steps: []WorkflowStep{{Uses: "actions/checkout@v4"}}}},
+				{Name: "first", Job: WorkflowJob{RunsOn: "ubuntu-latest", Steps: []WorkflowStep{{Uses: "actions/checkout@v7"}}}},
+				{Name: "second", Job: WorkflowJob{RunsOn: "ubuntu-latest", Steps: []WorkflowStep{{Uses: "actions/checkout@v7"}}}},
 			},
 		}
 

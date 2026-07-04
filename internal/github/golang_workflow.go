@@ -28,7 +28,7 @@ func GetGolangWorkflow() Workflow {
 				Job: WorkflowJob{
 					RunsOn: "ubuntu-latest",
 					Steps: []WorkflowStep{
-						{Uses: "actions/checkout@v6"},
+						{Uses: "actions/checkout@v7"},
 						{
 							Uses: "actions/setup-go@v6",
 							With: map[string]string{"go-version-file": "go.mod"},
@@ -51,7 +51,7 @@ func GetGolangWorkflow() Workflow {
 				Job: WorkflowJob{
 					RunsOn: "ubuntu-latest",
 					Steps: []WorkflowStep{
-						{Uses: "actions/checkout@v6"},
+						{Uses: "actions/checkout@v7"},
 						{
 							Uses: "actions/setup-go@v6",
 							With: map[string]string{"go-version-file": "go.mod"},
