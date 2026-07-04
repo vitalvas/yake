@@ -74,7 +74,7 @@ func TestGetGolangWorkflow(t *testing.T) {
 		assert.Contains(t, job.Steps[4].Run, "GITHUB_OUTPUT")
 		assert.Equal(t, "Publish coverage", job.Steps[5].Name)
 		assert.Equal(t, "steps.check-codecov.outputs.available == 'true'", job.Steps[5].If)
-		assert.Equal(t, "codecov/codecov-action@v6", job.Steps[5].Uses)
+		assert.Equal(t, "codecov/codecov-action@v7", job.Steps[5].Uses)
 		assert.Equal(t, "${{ secrets.CODECOV_TOKEN }}", job.Steps[5].Env["CODECOV_TOKEN"])
 		assert.Equal(t, "./coverage.txt", job.Steps[5].With["files"])
 	})
