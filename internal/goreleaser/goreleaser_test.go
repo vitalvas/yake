@@ -57,7 +57,9 @@ func TestGetConfig(t *testing.T) {
 	})
 
 	t.Run("configures deb package", func(t *testing.T) {
-		cfg := GetConfig("owner", "repo")
+		cfg := GetConfigWithOptions("owner", "repo", ConfigOptions{
+			DebianPackage: true,
+		})
 		require.Len(t, cfg.NFPMs, 1)
 
 		pkg := cfg.NFPMs[0]
@@ -71,6 +73,11 @@ func TestGetConfig(t *testing.T) {
 		assert.Equal(t, []string{"deb"}, pkg.Formats)
 		assert.Equal(t, "utils", pkg.Section)
 		assert.Equal(t, "optional", pkg.Priority)
+	})
+
+	t.Run("omits deb package by default", func(t *testing.T) {
+		cfg := GetConfig("owner", "repo")
+		assert.Empty(t, cfg.NFPMs)
 	})
 
 	t.Run("disables changelog", func(t *testing.T) {
@@ -108,6 +115,20 @@ func TestConfigMarshal(t *testing.T) {
 		assert.Contains(t, content, "enabled: true")
 		assert.Contains(t, content, "compress: best")
 		assert.Contains(t, content, "lzma: true")
+		assert.NotContains(t, content, "nfpms:")
+		assert.Contains(t, content, "disable: true")
+		assert.Contains(t, content, "prerelease: auto")
+		assert.Contains(t, content, "mode: keep-existing")
+	})
+
+	t.Run("contains deb package when enabled", func(t *testing.T) {
+		cfg := GetConfigWithOptions("myowner", "myapp", ConfigOptions{
+			DebianPackage: true,
+		})
+		data, err := cfg.Marshal()
+		require.NoError(t, err)
+
+		content := string(data)
 		assert.Contains(t, content, "nfpms:")
 		assert.Contains(t, content, "package_name: myapp")
 		assert.Contains(t, content, "vendor: myowner")
@@ -120,9 +141,6 @@ func TestConfigMarshal(t *testing.T) {
 		assert.Contains(t, content, "priority: optional")
 		assert.NotContains(t, content, "bindir:")
 		assert.NotContains(t, content, "package_name: myapp\n    ids:")
-		assert.Contains(t, content, "disable: true")
-		assert.Contains(t, content, "prerelease: auto")
-		assert.Contains(t, content, "mode: keep-existing")
 	})
 
 	t.Run("contains ldflags with Go template syntax", func(t *testing.T) {

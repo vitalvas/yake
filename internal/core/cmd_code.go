@@ -183,20 +183,32 @@ func codeGithubReleasePlease(cfg releasePleaseConfig) error {
 }
 
 func createGoreleaserCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "goreleaser",
 		Short: "Create GoReleaser configuration",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if _, err := os.Stat(".goreleaser.yml"); err == nil {
 				return fmt.Errorf("goreleaser config file already exists")
 			}
 
-			return codeGoreleaser()
+			deb, _ := cmd.Flags().GetBool("deb")
+
+			return codeGoreleaser(goreleaserConfig{
+				DebianPackage: deb,
+			})
 		},
 	}
+
+	cmd.Flags().Bool("deb", false, "Add Debian package configuration")
+
+	return cmd
 }
 
-func codeGoreleaser() error {
+type goreleaserConfig struct {
+	DebianPackage bool
+}
+
+func codeGoreleaser(cfg goreleaserConfig) error {
 	repo, err := tools.DetectGitHubRepo()
 	if err != nil {
 		return err
@@ -204,9 +216,11 @@ func codeGoreleaser() error {
 
 	log.Println("Creating .goreleaser.yml")
 
-	cfg := goreleaser.GetConfig(repo.Owner, repo.Name)
+	config := goreleaser.GetConfigWithOptions(repo.Owner, repo.Name, goreleaser.ConfigOptions{
+		DebianPackage: cfg.DebianPackage,
+	})
 
-	data, err := cfg.Marshal()
+	data, err := config.Marshal()
 	if err != nil {
 		return err
 	}

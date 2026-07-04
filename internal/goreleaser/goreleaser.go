@@ -13,11 +13,15 @@ type Config struct {
 	Before    Before    `yaml:"before"`
 	Builds    []Build   `yaml:"builds"`
 	UPX       []UPX     `yaml:"upx"`
-	NFPMs     []NFPM    `yaml:"nfpms"`
+	NFPMs     []NFPM    `yaml:"nfpms,omitempty"`
 	Checksum  Checksum  `yaml:"checksum"`
 	Snapshot  Snapshot  `yaml:"snapshot"`
 	Changelog Changelog `yaml:"changelog"`
 	Release   Release   `yaml:"release"`
+}
+
+type ConfigOptions struct {
+	DebianPackage bool
 }
 
 type Before struct {
@@ -82,7 +86,11 @@ type ReleaseGitHub struct {
 }
 
 func GetConfig(owner, repo string) Config {
-	return Config{
+	return GetConfigWithOptions(owner, repo, ConfigOptions{})
+}
+
+func GetConfigWithOptions(owner, repo string, opts ConfigOptions) Config {
+	cfg := Config{
 		Version: 2,
 		Dist:    "_dist_build/",
 		Before: Before{
@@ -114,20 +122,6 @@ func GetConfig(owner, repo string) Config {
 				Lzma:     true,
 			},
 		},
-		NFPMs: []NFPM{
-			{
-				ID:          repo,
-				PackageName: repo,
-				Vendor:      owner,
-				Homepage:    fmt.Sprintf("https://github.com/%s/%s", owner, repo),
-				Maintainer:  fmt.Sprintf("%s <%s@users.noreply.github.com>", owner, owner),
-				Description: fmt.Sprintf("%s command line tool", repo),
-				License:     "Unknown",
-				Formats:     []string{"deb"},
-				Section:     "utils",
-				Priority:    "optional",
-			},
-		},
 		Checksum: Checksum{
 			NameTemplate: "checksums.txt",
 			Algorithm:    "sha256",
@@ -148,6 +142,25 @@ func GetConfig(owner, repo string) Config {
 			Mode:       "keep-existing",
 		},
 	}
+
+	if opts.DebianPackage {
+		cfg.NFPMs = []NFPM{
+			{
+				ID:          repo,
+				PackageName: repo,
+				Vendor:      owner,
+				Homepage:    fmt.Sprintf("https://github.com/%s/%s", owner, repo),
+				Maintainer:  fmt.Sprintf("%s <%s@users.noreply.github.com>", owner, owner),
+				Description: fmt.Sprintf("%s command line tool", repo),
+				License:     "Unknown",
+				Formats:     []string{"deb"},
+				Section:     "utils",
+				Priority:    "optional",
+			},
+		}
+	}
+
+	return cfg
 }
 
 func (c Config) Marshal() ([]byte, error) {
