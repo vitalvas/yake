@@ -49,7 +49,6 @@ func TestGetConfig(t *testing.T) {
 
 		upx := cfg.UPX[0]
 		assert.True(t, upx.Enabled)
-		assert.Equal(t, []string{"repo"}, upx.IDs)
 		assert.Equal(t, []string{"linux"}, upx.Goos)
 		assert.Equal(t, []string{"amd64", "arm64"}, upx.Goarch)
 		assert.Equal(t, "best", upx.Compress)
@@ -140,7 +139,6 @@ func TestConfigMarshal(t *testing.T) {
 		assert.Contains(t, content, "section: utils")
 		assert.Contains(t, content, "priority: optional")
 		assert.NotContains(t, content, "bindir:")
-		assert.NotContains(t, content, "package_name: myapp\n    ids:")
 	})
 
 	t.Run("contains ldflags with Go template syntax", func(t *testing.T) {

@@ -45,7 +45,6 @@ type Checksum struct {
 
 type UPX struct {
 	Enabled  bool     `yaml:"enabled"`
-	IDs      []string `yaml:"ids"`
 	Goos     []string `yaml:"goos"`
 	Goarch   []string `yaml:"goarch"`
 	Compress string   `yaml:"compress"`
@@ -115,7 +114,6 @@ func GetConfigWithOptions(owner, repo string, opts ConfigOptions) Config {
 		UPX: []UPX{
 			{
 				Enabled:  true,
-				IDs:      []string{repo},
 				Goos:     []string{"linux"},
 				Goarch:   []string{"amd64", "arm64"},
 				Compress: "best",
