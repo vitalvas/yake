@@ -51,8 +51,6 @@ func TestGetConfig(t *testing.T) {
 		assert.True(t, upx.Enabled)
 		assert.Equal(t, []string{"linux"}, upx.Goos)
 		assert.Equal(t, []string{"amd64", "arm64"}, upx.Goarch)
-		assert.Equal(t, "best", upx.Compress)
-		assert.True(t, upx.Lzma)
 	})
 
 	t.Run("configures deb package", func(t *testing.T) {
@@ -112,8 +110,6 @@ func TestConfigMarshal(t *testing.T) {
 		assert.Contains(t, content, "- -trimpath")
 		assert.Contains(t, content, "upx:")
 		assert.Contains(t, content, "enabled: true")
-		assert.Contains(t, content, "compress: best")
-		assert.Contains(t, content, "lzma: true")
 		assert.NotContains(t, content, "nfpms:")
 		assert.Contains(t, content, "disable: true")
 		assert.Contains(t, content, "prerelease: auto")

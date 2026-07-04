@@ -44,11 +44,9 @@ type Checksum struct {
 }
 
 type UPX struct {
-	Enabled  bool     `yaml:"enabled"`
-	Goos     []string `yaml:"goos"`
-	Goarch   []string `yaml:"goarch"`
-	Compress string   `yaml:"compress"`
-	Lzma     bool     `yaml:"lzma"`
+	Enabled bool     `yaml:"enabled"`
+	Goos    []string `yaml:"goos"`
+	Goarch  []string `yaml:"goarch"`
 }
 
 type NFPM struct {
@@ -113,11 +111,9 @@ func GetConfigWithOptions(owner, repo string, opts ConfigOptions) Config {
 		},
 		UPX: []UPX{
 			{
-				Enabled:  true,
-				Goos:     []string{"linux"},
-				Goarch:   []string{"amd64", "arm64"},
-				Compress: "best",
-				Lzma:     true,
+				Enabled: true,
+				Goos:    []string{"linux"},
+				Goarch:  []string{"amd64", "arm64"},
 			},
 		},
 		Checksum: Checksum{
