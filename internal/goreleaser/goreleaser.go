@@ -2,6 +2,7 @@ package goreleaser
 
 import (
 	"bytes"
+	"fmt"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	Before    Before    `yaml:"before"`
 	Builds    []Build   `yaml:"builds"`
 	UPX       []UPX     `yaml:"upx"`
+	NFPMs     []NFPM    `yaml:"nfpms"`
 	Checksum  Checksum  `yaml:"checksum"`
 	Snapshot  Snapshot  `yaml:"snapshot"`
 	Changelog Changelog `yaml:"changelog"`
@@ -44,6 +46,19 @@ type UPX struct {
 	Goarch   []string `yaml:"goarch"`
 	Compress string   `yaml:"compress"`
 	Lzma     bool     `yaml:"lzma"`
+}
+
+type NFPM struct {
+	ID          string   `yaml:"id"`
+	PackageName string   `yaml:"package_name"`
+	Vendor      string   `yaml:"vendor"`
+	Homepage    string   `yaml:"homepage"`
+	Maintainer  string   `yaml:"maintainer"`
+	Description string   `yaml:"description"`
+	License     string   `yaml:"license"`
+	Formats     []string `yaml:"formats"`
+	Section     string   `yaml:"section"`
+	Priority    string   `yaml:"priority"`
 }
 
 type Snapshot struct {
@@ -97,6 +112,20 @@ func GetConfig(owner, repo string) Config {
 				Goarch:   []string{"amd64", "arm64"},
 				Compress: "best",
 				Lzma:     true,
+			},
+		},
+		NFPMs: []NFPM{
+			{
+				ID:          repo,
+				PackageName: repo,
+				Vendor:      owner,
+				Homepage:    fmt.Sprintf("https://github.com/%s/%s", owner, repo),
+				Maintainer:  fmt.Sprintf("%s <%s@users.noreply.github.com>", owner, owner),
+				Description: fmt.Sprintf("%s command line tool", repo),
+				License:     "Unknown",
+				Formats:     []string{"deb"},
+				Section:     "utils",
+				Priority:    "optional",
 			},
 		},
 		Checksum: Checksum{

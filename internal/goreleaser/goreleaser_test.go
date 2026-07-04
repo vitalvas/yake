@@ -56,6 +56,23 @@ func TestGetConfig(t *testing.T) {
 		assert.True(t, upx.Lzma)
 	})
 
+	t.Run("configures deb package", func(t *testing.T) {
+		cfg := GetConfig("owner", "repo")
+		require.Len(t, cfg.NFPMs, 1)
+
+		pkg := cfg.NFPMs[0]
+		assert.Equal(t, "repo", pkg.ID)
+		assert.Equal(t, "repo", pkg.PackageName)
+		assert.Equal(t, "owner", pkg.Vendor)
+		assert.Equal(t, "https://github.com/owner/repo", pkg.Homepage)
+		assert.Equal(t, "owner <owner@users.noreply.github.com>", pkg.Maintainer)
+		assert.Equal(t, "repo command line tool", pkg.Description)
+		assert.Equal(t, "Unknown", pkg.License)
+		assert.Equal(t, []string{"deb"}, pkg.Formats)
+		assert.Equal(t, "utils", pkg.Section)
+		assert.Equal(t, "optional", pkg.Priority)
+	})
+
 	t.Run("disables changelog", func(t *testing.T) {
 		cfg := GetConfig("owner", "repo")
 		assert.True(t, cfg.Changelog.Disable)
@@ -91,6 +108,18 @@ func TestConfigMarshal(t *testing.T) {
 		assert.Contains(t, content, "enabled: true")
 		assert.Contains(t, content, "compress: best")
 		assert.Contains(t, content, "lzma: true")
+		assert.Contains(t, content, "nfpms:")
+		assert.Contains(t, content, "package_name: myapp")
+		assert.Contains(t, content, "vendor: myowner")
+		assert.Contains(t, content, "homepage: https://github.com/myowner/myapp")
+		assert.Contains(t, content, "maintainer: myowner <myowner@users.noreply.github.com>")
+		assert.Contains(t, content, "description: myapp command line tool")
+		assert.Contains(t, content, "license: Unknown")
+		assert.Contains(t, content, "- deb")
+		assert.Contains(t, content, "section: utils")
+		assert.Contains(t, content, "priority: optional")
+		assert.NotContains(t, content, "bindir:")
+		assert.NotContains(t, content, "package_name: myapp\n    ids:")
 		assert.Contains(t, content, "disable: true")
 		assert.Contains(t, content, "prerelease: auto")
 		assert.Contains(t, content, "mode: keep-existing")
