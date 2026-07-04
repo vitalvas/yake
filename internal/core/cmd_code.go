@@ -40,34 +40,6 @@ func createLinterNewCommand() *cobra.Command {
 	return cmd
 }
 
-func createGithubDependabotCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "github-dependabot",
-		Short: "Create GitHub Dependabot configuration",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			lang, _ := cmd.Flags().GetString("lang")
-			switch lang {
-			case "go":
-				if _, err := os.Stat(".github/dependabot.yml"); err == nil {
-					return fmt.Errorf("dependabot config file already exists")
-				}
-
-				if err := codeGithubDependabot("go"); err != nil {
-					return err
-				}
-
-			default:
-				return fmt.Errorf("unsupported language: %s", lang)
-			}
-
-			return nil
-		},
-	}
-	cmd.Flags().StringP("lang", "l", "", "Programming language (required)")
-	cmd.MarkFlagRequired("lang")
-	return cmd
-}
-
 var codeSubcommands = []*cobra.Command{
 	{
 		Use:   "defaults",
@@ -85,7 +57,6 @@ var codeSubcommands = []*cobra.Command{
 		},
 	},
 	createLinterNewCommand(),
-	createGithubDependabotCommand(),
 	createGithubReleasePleaseCommand(),
 	createGithubLangGolangCommand(),
 	createGoreleaserCommand(),
@@ -133,18 +104,6 @@ func codeLinterNewGolang() error {
 	log.Println("Creating .golangci.yml")
 
 	return tools.WriteYamlFile(".golangci.yml", payload)
-}
-
-func codeGithubDependabot(lang github.Lang) error {
-	payload := github.GetGithub(lang)
-
-	if err := os.MkdirAll(".github", 0755); err != nil {
-		return err
-	}
-
-	log.Println("Creating .github/dependabot.yml")
-
-	return tools.WriteYamlFile(".github/dependabot.yml", payload)
 }
 
 func codeGithubReleasePleaseWorkflow(cfg releasePleaseConfig) error {

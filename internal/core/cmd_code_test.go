@@ -79,60 +79,9 @@ func TestCreateLinterNewCommand(t *testing.T) {
 	})
 }
 
-func TestCreateGithubDependabotCommand(t *testing.T) {
-	t.Run("returns valid command", func(t *testing.T) {
-		cmd := createGithubDependabotCommand()
-
-		require.NotNil(t, cmd)
-		assert.Equal(t, "github-dependabot", cmd.Use)
-		assert.Equal(t, "Create GitHub Dependabot configuration", cmd.Short)
-		assert.NotNil(t, cmd.RunE)
-	})
-
-	t.Run("has required lang flag", func(t *testing.T) {
-		cmd := createGithubDependabotCommand()
-
-		flag := cmd.Flags().Lookup("lang")
-		require.NotNil(t, flag)
-		assert.Equal(t, "l", flag.Shorthand)
-	})
-
-	t.Run("returns error for unsupported language", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-
-		os.Chdir(tmpDir)
-
-		cmd := createGithubDependabotCommand()
-		cmd.SetArgs([]string{"--lang", "unsupported"})
-
-		err := cmd.Execute()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported language")
-	})
-
-	t.Run("returns error when config already exists", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-
-		os.Chdir(tmpDir)
-		os.MkdirAll(".github", 0755)
-		os.WriteFile(filepath.Join(".github", "dependabot.yml"), []byte(""), 0644)
-
-		cmd := createGithubDependabotCommand()
-		cmd.SetArgs([]string{"--lang", "go"})
-
-		err := cmd.Execute()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "already exists")
-	})
-}
-
 func TestCodeSubcommands(t *testing.T) {
 	t.Run("contains expected subcommands", func(t *testing.T) {
-		require.GreaterOrEqual(t, len(codeSubcommands), 6)
+		require.GreaterOrEqual(t, len(codeSubcommands), 5)
 
 		uses := make([]string, len(codeSubcommands))
 		for i, cmd := range codeSubcommands {
@@ -141,7 +90,6 @@ func TestCodeSubcommands(t *testing.T) {
 
 		assert.Contains(t, uses, "defaults")
 		assert.Contains(t, uses, "linter-new")
-		assert.Contains(t, uses, "github-dependabot")
 		assert.Contains(t, uses, "github-release-please")
 		assert.Contains(t, uses, "github-lang-golang")
 		assert.Contains(t, uses, "goreleaser")
@@ -235,37 +183,6 @@ func TestCodeLinterNewGolang(t *testing.T) {
 	})
 }
 
-func TestCodeGithubDependabot(t *testing.T) {
-	t.Run("creates dependabot config file", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-
-		os.Chdir(tmpDir)
-
-		err := codeGithubDependabot("go")
-		assert.NoError(t, err)
-
-		_, statErr := os.Stat(".github/dependabot.yml")
-		assert.NoError(t, statErr)
-	})
-
-	t.Run("creates .github directory if not exists", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-
-		os.Chdir(tmpDir)
-
-		err := codeGithubDependabot("go")
-		assert.NoError(t, err)
-
-		info, statErr := os.Stat(".github")
-		assert.NoError(t, statErr)
-		assert.True(t, info.IsDir())
-	})
-}
-
 func TestLinterNewCommandSuccess(t *testing.T) {
 	t.Run("creates config for go language", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -281,25 +198,6 @@ func TestLinterNewCommandSuccess(t *testing.T) {
 		assert.NoError(t, err)
 
 		_, statErr := os.Stat(".golangci.yml")
-		assert.NoError(t, statErr)
-	})
-}
-
-func TestGithubDependabotCommandSuccess(t *testing.T) {
-	t.Run("creates config for go language", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-
-		os.Chdir(tmpDir)
-
-		cmd := createGithubDependabotCommand()
-		cmd.SetArgs([]string{"--lang", "go"})
-
-		err := cmd.Execute()
-		assert.NoError(t, err)
-
-		_, statErr := os.Stat(".github/dependabot.yml")
 		assert.NoError(t, statErr)
 	})
 }
