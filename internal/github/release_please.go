@@ -15,7 +15,7 @@ func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
 				},
 				Steps: []WorkflowStep{
 					{
-						Uses: "googleapis/release-please-action@v4",
+						Uses: "googleapis/release-please-action@v5",
 						ID:   "release",
 						With: map[string]string{
 							"token":         "${{ secrets.GITHUB_TOKEN }}",
