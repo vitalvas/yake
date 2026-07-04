@@ -2,5 +2,23 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "automerge": true,
+  "automergeType": "pr",
+  "dependencyDashboard": false,
+  "platformAutomerge": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update GitHub Actions refs embedded in Go code",
+      "managerFilePatterns": [
+        "/\\.go$/"
+      ],
+      "matchStrings": [
+        "(?:^|[^A-Za-z0-9_.\\/-])(?<packageName>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_.-]+)*@(?<currentValue>[^\"\\s]+)"
+      ],
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "github-actions"
+    }
   ]
 }
