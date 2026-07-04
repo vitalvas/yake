@@ -182,7 +182,7 @@ func TestWorkflowMarshal(t *testing.T) {
 				Steps: []WorkflowStep{
 					{
 						Name: "Upload",
-						Uses: "codecov/codecov-action@v5",
+						Uses: "codecov/codecov-action@v7",
 						Env:  map[string]string{"TOKEN": "secret"},
 						With: map[string]string{"files": "coverage.txt"},
 					},

@@ -73,7 +73,7 @@ func GetGolangWorkflow() Workflow {
 						{
 							Name: "Publish coverage",
 							If:   "steps.check-codecov.outputs.available == 'true'",
-							Uses: "codecov/codecov-action@v6",
+							Uses: "codecov/codecov-action@v7",
 							Env:  map[string]string{"CODECOV_TOKEN": "${{ secrets.CODECOV_TOKEN }}"},
 							With: map[string]string{"files": "./coverage.txt"},
 						},
