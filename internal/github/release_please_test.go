@@ -55,7 +55,7 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 		require.Len(t, job.Steps, 1)
 
 		step := job.Steps[0]
-		assert.Equal(t, "googleapis/release-please-action@v4", step.Uses)
+		assert.Equal(t, "googleapis/release-please-action@v5", step.Uses)
 		assert.Equal(t, "release", step.ID)
 		assert.Equal(t, "${{ secrets.GITHUB_TOKEN }}", step.With["token"])
 		assert.Equal(t, ".github/release-please-config.json", step.With["config-file"])
