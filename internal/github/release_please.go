@@ -81,7 +81,7 @@ func goreleaserSteps() []WorkflowStep {
 		WorkflowStep{
 			Name: "Test GoReleaser",
 			If:   "${{ needs.release-please.outputs.release_created != 'true' }}",
-			Uses: "goreleaser/goreleaser-action@v6",
+			Uses: "goreleaser/goreleaser-action@v7",
 			With: map[string]string{
 				"distribution": "goreleaser",
 				"version":      "~> v2",
@@ -91,7 +91,7 @@ func goreleaserSteps() []WorkflowStep {
 		WorkflowStep{
 			Name: "Run GoReleaser",
 			If:   "${{ needs.release-please.outputs.release_created }}",
-			Uses: "goreleaser/goreleaser-action@v6",
+			Uses: "goreleaser/goreleaser-action@v7",
 			With: map[string]string{
 				"distribution": "goreleaser",
 				"version":      "~> v2",
