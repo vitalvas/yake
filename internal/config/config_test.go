@@ -47,6 +47,8 @@ func TestLoad(t *testing.T) {
     max_duration: "15s"
   package_naming:
     pattern: "^[a-z]{2,16}$"
+  ascii_only:
+    enable: false
   string_concat:
     enable: false
 tests:
@@ -66,6 +68,7 @@ tests:
 		assert.Equal(t, 4, *cfg.Policy.FuncSignature.MaxResults)
 		assert.Equal(t, "15s", *cfg.Policy.TestDuration.MaxDuration)
 		assert.Equal(t, "^[a-z]{2,16}$", *cfg.Policy.PackageNaming.Pattern)
+		assert.False(t, *cfg.Policy.ASCIIOnly.Enabled)
 		assert.False(t, *cfg.Policy.StringConcat.Enabled)
 		assert.Equal(t, []string{"integration", "e2e"}, cfg.Tests.Tags)
 	})

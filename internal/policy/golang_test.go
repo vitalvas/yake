@@ -21,6 +21,7 @@ func boolPtr(v bool) *bool          { return &v }
 func intPtr(v int) *int             { return &v }
 func float64Ptr(v float64) *float64 { return &v }
 func stringPtr(v string) *string    { return &v }
+func nonASCIIFixtureWord() string   { return string([]byte{'c', 'a', 'f', 0xc3, 0xa9}) }
 
 const validTestFile = `package test
 
@@ -947,6 +948,133 @@ func Test_findStringConcatenations(t *testing.T) {
 		violations := findStringConcatenations(path)
 
 		assert.Len(t, violations, 1)
+	})
+}
+
+func Test_checkASCIIOnly(t *testing.T) {
+	t.Run("passes with ASCII Go source", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := "package main\n\nconst greeting = \"hello\"\n"
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkASCIIOnly()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects non-ASCII characters", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := fmt.Sprintf("package main\n\nconst greeting = %q\n", nonASCIIFixtureWord())
+		require.NoError(t, os.WriteFile("main.go", []byte(code), 0644))
+
+		err := checkASCIIOnly()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ASCII-only violations")
+		assert.Contains(t, err.Error(), "main.go:3:22")
+		assert.Contains(t, err.Error(), "U+00E9")
+	})
+
+	t.Run("checks test files too", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := fmt.Sprintf("package main\n\nfunc TestCafe() { _ = %q }\n", nonASCIIFixtureWord())
+		require.NoError(t, os.WriteFile("main_test.go", []byte(code), 0644))
+
+		err := checkASCIIOnly()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "main_test.go")
+	})
+
+	t.Run("skips vendor directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("vendor/lib", 0755))
+		code := fmt.Sprintf("package lib\n\nconst greeting = %q\n", nonASCIIFixtureWord())
+		require.NoError(t, os.WriteFile("vendor/lib/lib.go", []byte(code), 0644))
+
+		err := checkASCIIOnly()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips .pb.go files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		code := fmt.Sprintf("package main\n\nconst greeting = %q\n", nonASCIIFixtureWord())
+		require.NoError(t, os.WriteFile("msg.pb.go", []byte(code), 0644))
+
+		err := checkASCIIOnly()
+
+		assert.NoError(t, err)
+	})
+}
+
+func Test_findNonASCIIChars(t *testing.T) {
+	t.Run("returns empty for ASCII source", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		require.NoError(t, os.WriteFile(path, []byte("package main\n\nconst value = \"ascii\"\n"), 0644))
+
+		violations := findNonASCIIChars(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("reports non-ASCII rune location", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := fmt.Sprintf("package main\n\nconst value = %q\n", nonASCIIFixtureWord())
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findNonASCIIChars(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "test.go:3:19")
+		assert.Contains(t, violations[0], "U+00E9")
+	})
+
+	t.Run("reports invalid non-ASCII bytes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		data := append([]byte("package main\n\nvar value = \""), 0xff)
+		data = append(data, []byte("\"\n")...)
+		require.NoError(t, os.WriteFile(path, data, 0644))
+
+		violations := findNonASCIIChars(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "test.go:3:14")
+		assert.Contains(t, violations[0], "0xFF")
+	})
+
+	t.Run("returns nil for non-existent file", func(t *testing.T) {
+		violations := findNonASCIIChars("/nonexistent/file.go")
+
+		assert.Nil(t, violations)
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/vitalvas/yake/internal/config"
 )
@@ -25,6 +26,11 @@ const (
 	minFunctionLines   = 5
 	skipDirective      = "//yake:skip-test"
 )
+
+type golangPolicyCheck struct {
+	section any
+	run     func() error
+}
 
 func RunGolangChecks() error {
 	log.Println("Running Go policy checks...")
@@ -36,87 +42,12 @@ func RunGolangChecks() error {
 
 	var allErrors []string
 
-	if enabled(cfg.Policy.EntryPoints) {
-		if err := checkEntryPoints(resolveMaxMainLines(cfg.Policy.EntryPoints)); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.PackageNaming) {
-		if err := checkPackageNaming(resolvePackageNamingPattern(cfg.Policy.PackageNaming)); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.StringConcat) {
-		if err := checkStringConcat(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.StdlibWrappers) {
-		if err := checkStdlibWrappers(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.FuncSignature) {
-		if err := checkFuncSignature(resolveMaxFuncParams(cfg.Policy.FuncSignature), resolveMaxFuncResults(cfg.Policy.FuncSignature)); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.CompositeLiteral) {
-		if err := checkCompositeLiteral(resolveMaxSingleLineFields(cfg.Policy.CompositeLiteral)); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.Stuttering) {
-		if err := checkStuttering(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.GetterNaming) {
-		if err := checkGetterNaming(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.PrivateExportedMethods) {
-		if err := checkPrivateExportedMethods(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.NoInit) {
-		if err := checkNoInit(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.TestFileNaming) {
-		if err := checkTestFileNaming(); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.TestDuration) {
-		if err := checkTestDuration(resolveMaxTestDuration(cfg.Policy.TestDuration)); err != nil {
-			allErrors = append(allErrors, err.Error())
-		}
-	}
-
-	if enabled(cfg.Policy.Coverage) {
-		covOpts := coverageOptions{
-			minCoverage:           resolveMinCoverage(cfg.Policy.Coverage),
-			maxUncoveredFuncLines: resolveMaxUncoveredFuncLines(cfg.Policy.Coverage),
-			excludePackages:       resolveExcludePackages(cfg.Policy.Coverage),
-			packageOverrides:      resolvePackageOverrides(cfg.Policy.Coverage),
+	for _, policyCheck := range golangPolicyChecks(cfg) {
+		if !enabled(policyCheck.section) {
+			continue
 		}
 
-		if err := checkCoverage(covOpts); err != nil {
+		if err := policyCheck.run(); err != nil {
 			allErrors = append(allErrors, err.Error())
 		}
 	}
@@ -126,6 +57,84 @@ func RunGolangChecks() error {
 	}
 
 	return nil
+}
+
+func golangPolicyChecks(cfg *config.Config) []golangPolicyCheck {
+	return []golangPolicyCheck{
+		{
+			section: cfg.Policy.EntryPoints,
+			run: func() error {
+				return checkEntryPoints(resolveMaxMainLines(cfg.Policy.EntryPoints))
+			},
+		},
+		{
+			section: cfg.Policy.PackageNaming,
+			run: func() error {
+				return checkPackageNaming(resolvePackageNamingPattern(cfg.Policy.PackageNaming))
+			},
+		},
+		{
+			section: cfg.Policy.ASCIIOnly,
+			run:     checkASCIIOnly,
+		},
+		{
+			section: cfg.Policy.StringConcat,
+			run:     checkStringConcat,
+		},
+		{
+			section: cfg.Policy.StdlibWrappers,
+			run:     checkStdlibWrappers,
+		},
+		{
+			section: cfg.Policy.FuncSignature,
+			run: func() error {
+				return checkFuncSignature(resolveMaxFuncParams(cfg.Policy.FuncSignature), resolveMaxFuncResults(cfg.Policy.FuncSignature))
+			},
+		},
+		{
+			section: cfg.Policy.CompositeLiteral,
+			run: func() error {
+				return checkCompositeLiteral(resolveMaxSingleLineFields(cfg.Policy.CompositeLiteral))
+			},
+		},
+		{
+			section: cfg.Policy.Stuttering,
+			run:     checkStuttering,
+		},
+		{
+			section: cfg.Policy.GetterNaming,
+			run:     checkGetterNaming,
+		},
+		{
+			section: cfg.Policy.PrivateExportedMethods,
+			run:     checkPrivateExportedMethods,
+		},
+		{
+			section: cfg.Policy.NoInit,
+			run:     checkNoInit,
+		},
+		{
+			section: cfg.Policy.TestFileNaming,
+			run:     checkTestFileNaming,
+		},
+		{
+			section: cfg.Policy.TestDuration,
+			run: func() error {
+				return checkTestDuration(resolveMaxTestDuration(cfg.Policy.TestDuration))
+			},
+		},
+		{
+			section: cfg.Policy.Coverage,
+			run: func() error {
+				return checkCoverage(coverageOptions{
+					minCoverage:           resolveMinCoverage(cfg.Policy.Coverage),
+					maxUncoveredFuncLines: resolveMaxUncoveredFuncLines(cfg.Policy.Coverage),
+					excludePackages:       resolveExcludePackages(cfg.Policy.Coverage),
+					packageOverrides:      resolvePackageOverrides(cfg.Policy.Coverage),
+				})
+			},
+		},
+	}
 }
 
 // enabled reports whether a policy section is active. A nil section or a nil
@@ -468,6 +477,88 @@ func containsStringLit(expr ast.Expr) bool {
 	}
 
 	return false
+}
+
+func checkASCIIOnly() error {
+	log.Println("Checking Go source for non-ASCII characters...")
+
+	var violations []string
+
+	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			switch info.Name() {
+			case "vendor", ".git", "test", "tests", "examples":
+				return filepath.SkipDir
+			}
+
+			return nil
+		}
+
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") {
+			return nil
+		}
+
+		fileViolations := findNonASCIIChars(path)
+		violations = append(violations, fileViolations...)
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
+	}
+
+	if len(violations) > 0 {
+		return fmt.Errorf("ASCII-only violations (use only ASCII characters in Go source):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+func findNonASCIIChars(filePath string) []string {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil
+	}
+
+	var violations []string
+	line := 1
+	column := 1
+
+	for offset := 0; offset < len(data); {
+		b := data[offset]
+		if b == '\n' {
+			line++
+			column = 1
+			offset++
+			continue
+		}
+
+		if b <= 0x7f {
+			column++
+			offset++
+			continue
+		}
+
+		r, size := utf8.DecodeRune(data[offset:])
+		if r == utf8.RuneError && size == 1 {
+			violations = append(violations,
+				fmt.Sprintf("  - %s:%d:%d: non-ASCII byte 0x%X", filePath, line, column, b))
+		} else {
+			violations = append(violations,
+				fmt.Sprintf("  - %s:%d:%d: non-ASCII character U+%04X", filePath, line, column, r))
+		}
+
+		column++
+		offset += size
+	}
+
+	return violations
 }
 
 func checkStdlibWrappers() error {

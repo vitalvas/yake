@@ -35,6 +35,7 @@ type TestsConfig struct {
 type PolicyConfig struct {
 	EntryPoints            *EntryPointsPolicy      `yaml:"entry_points"`
 	PackageNaming          *PackageNamingPolicy    `yaml:"package_naming"`
+	ASCIIOnly              *PolicyToggle           `yaml:"ascii_only"`
 	StringConcat           *PolicyToggle           `yaml:"string_concat"`
 	StdlibWrappers         *PolicyToggle           `yaml:"stdlib_wrappers"`
 	FuncSignature          *FuncSignaturePolicy    `yaml:"func_signature"`
