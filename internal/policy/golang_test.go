@@ -985,7 +985,7 @@ func Test_checkASCIIOnly(t *testing.T) {
 		assert.Contains(t, err.Error(), "U+00E9")
 	})
 
-	t.Run("checks test files too", func(t *testing.T) {
+	t.Run("allows non-ASCII characters in test files", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
@@ -997,8 +997,7 @@ func Test_checkASCIIOnly(t *testing.T) {
 
 		err := checkASCIIOnly()
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "main_test.go")
+		assert.NoError(t, err)
 	})
 
 	t.Run("skips vendor directory", func(t *testing.T) {

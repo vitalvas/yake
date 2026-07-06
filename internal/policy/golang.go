@@ -480,7 +480,7 @@ func containsStringLit(expr ast.Expr) bool {
 }
 
 func checkASCIIOnly() error {
-	log.Println("Checking Go source for non-ASCII characters...")
+	log.Println("Checking non-test Go source for non-ASCII characters...")
 
 	var violations []string
 
@@ -498,7 +498,7 @@ func checkASCIIOnly() error {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, ".pb.go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 
@@ -513,7 +513,7 @@ func checkASCIIOnly() error {
 	}
 
 	if len(violations) > 0 {
-		return fmt.Errorf("ASCII-only violations (use only ASCII characters in Go source):\n%s",
+		return fmt.Errorf("ASCII-only violations (use only ASCII characters in non-test Go source):\n%s",
 			strings.Join(violations, "\n"))
 	}
 

@@ -28,7 +28,7 @@ policy:
     pattern: "^[0-9a-z]{3,32}$"  # default: ^[0-9a-z]{3,32}$
 
   ascii_only:
-    enable: true              # default: true
+    enable: true              # default: true, excludes _test.go
 
   string_concat:
     enable: true              # default: true
