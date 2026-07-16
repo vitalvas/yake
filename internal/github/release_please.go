@@ -70,7 +70,7 @@ func goreleaserSteps() []WorkflowStep {
 	if _, err := os.Stat("go.mod"); err == nil {
 		steps = append(steps, WorkflowStep{
 			Name: "Set up Go",
-			Uses: "actions/setup-go@v6",
+			Uses: "actions/setup-go@v7",
 			With: map[string]string{
 				"go-version-file": "go.mod",
 			},
