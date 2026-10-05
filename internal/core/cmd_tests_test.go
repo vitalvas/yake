@@ -1,7 +1,10 @@
 package core
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,6 +164,210 @@ func Test_runGoreleaserCheck(t *testing.T) {
 
 		assert.NoError(t, err)
 	})
+}
+
+func Test_runMarkdownlint(t *testing.T) {
+	t.Run("skips when markdownlint not installed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("README.md", []byte("# Title\n"), 0644))
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", tmpDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runMarkdownlint()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips when no targets exist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		binDir := writeFakeMarkdownlint(t, 0)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runMarkdownlint()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("runs when installed and README.md exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("README.md", []byte("# Title\n"), 0644))
+
+		binDir := writeFakeMarkdownlint(t, 0)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runMarkdownlint()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("runs when installed and lowercase readme.md exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("readme.md", []byte("# Title\n"), 0644))
+
+		binDir := writeFakeMarkdownlint(t, 0)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runMarkdownlint()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("runs when installed and docs dir exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.Mkdir("docs", 0755))
+
+		binDir := writeFakeMarkdownlint(t, 0)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runMarkdownlint()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("passes a file once even when targets resolve to it twice", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		// On a case-insensitive filesystem os.Stat succeeds for both README.md
+		// and readme.md even though a single file exists on disk; the file must
+		// still be linted only once.
+		require.NoError(t, os.WriteFile("README.md", []byte("# Title\n"), 0644))
+
+		argsPath := filepath.Join(tmpDir, "markdownlint-args")
+		binDir := writeRecordingMarkdownlint(t, argsPath)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		require.NoError(t, runMarkdownlint())
+
+		recorded, err := os.ReadFile(argsPath)
+		require.NoError(t, err)
+
+		lines := strings.Fields(string(recorded))
+		seen := make(map[string]bool, len(lines))
+		for _, line := range lines {
+			assert.Falsef(t, seen[line], "%q passed to markdownlint more than once", line)
+			seen[line] = true
+		}
+
+		assert.NotEmpty(t, lines, "expected at least one target to be linted")
+	})
+
+	t.Run("returns error when markdownlint fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("README.md", []byte("# Title\n"), 0644))
+
+		binDir := writeFakeMarkdownlint(t, 1)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runMarkdownlint()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to run")
+	})
+}
+
+func Test_markdownlintSeen(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.md"), []byte("a\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "b.md"), []byte("b\n"), 0644))
+
+	infoA, err := os.Stat(filepath.Join(tmpDir, "a.md"))
+	require.NoError(t, err)
+	infoASame, err := os.Stat(filepath.Join(tmpDir, "a.md"))
+	require.NoError(t, err)
+	infoB, err := os.Stat(filepath.Join(tmpDir, "b.md"))
+	require.NoError(t, err)
+
+	t.Run("empty seen set returns false", func(t *testing.T) {
+		assert.False(t, markdownlintSeen(nil, infoA))
+	})
+
+	t.Run("detects the same file", func(t *testing.T) {
+		assert.True(t, markdownlintSeen([]os.FileInfo{infoA}, infoASame))
+	})
+
+	t.Run("treats distinct files as unseen", func(t *testing.T) {
+		assert.False(t, markdownlintSeen([]os.FileInfo{infoA}, infoB))
+	})
+}
+
+// writeFakeMarkdownlint creates a stub markdownlint executable that exits with
+// the given status code and returns the directory holding it.
+func writeFakeMarkdownlint(t *testing.T, exitCode int) string {
+	t.Helper()
+
+	binDir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\nexit %d\n", exitCode)
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "markdownlint"), []byte(script), 0755))
+
+	return binDir
+}
+
+// writeRecordingMarkdownlint creates a stub markdownlint executable that writes
+// each argument on its own line to argsPath and returns the directory holding
+// it.
+func writeRecordingMarkdownlint(t *testing.T, argsPath string) string {
+	t.Helper()
+
+	binDir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\nfor a in \"$@\"; do echo \"$a\"; done > %q\n", argsPath)
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "markdownlint"), []byte(script), 0755))
+
+	return binDir
 }
 
 func Test_runRustTests(t *testing.T) {

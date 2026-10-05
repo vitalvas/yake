@@ -41,6 +41,10 @@ func createTestsCommand() *cobra.Command {
 				return err
 			}
 
+			if err := runMarkdownlint(); err != nil {
+				return err
+			}
+
 			log.Println("All tests completed successfully")
 
 			return nil
@@ -156,4 +160,54 @@ func runGoreleaserCheck() error {
 	}
 
 	return runCommand("goreleaser", "check")
+}
+
+// markdownlintTargets lists the documentation paths linted when present.
+var markdownlintTargets = []string{"docs/", "README.md", "readme.md"}
+
+// runMarkdownlint lints documentation, but only when the markdownlint binary is
+// installed and at least one of the configured targets exists. Only existing
+// targets are passed to the linter. Targets that resolve to the same file on a
+// case-insensitive filesystem (for example README.md and readme.md) are passed
+// once.
+func runMarkdownlint() error {
+	if _, err := exec.LookPath("markdownlint"); err != nil {
+		return nil
+	}
+
+	args := make([]string, 0, len(markdownlintTargets))
+	seen := make([]os.FileInfo, 0, len(markdownlintTargets))
+
+	for _, target := range markdownlintTargets {
+		info, err := os.Stat(target)
+		if err != nil {
+			continue
+		}
+
+		if markdownlintSeen(seen, info) {
+			continue
+		}
+
+		seen = append(seen, info)
+		args = append(args, target)
+	}
+
+	if len(args) == 0 {
+		return nil
+	}
+
+	return runCommand("markdownlint", args...)
+}
+
+// markdownlintSeen reports whether info identifies a file already collected,
+// collapsing paths that point at the same file (for example README.md and
+// readme.md on a case-insensitive filesystem).
+func markdownlintSeen(seen []os.FileInfo, info os.FileInfo) bool {
+	for _, existing := range seen {
+		if os.SameFile(existing, info) {
+			return true
+		}
+	}
+
+	return false
 }
