@@ -20,7 +20,9 @@ func createRunCommand() *cobra.Command {
 				return err
 			}
 
-			if _, err := os.Stat("go.mod"); err == nil {
+			goPackages := hasGoPackages()
+
+			if goPackages {
 				if err := runGoTests(cfg.Tests.Tags); err != nil {
 					return err
 				}
@@ -36,7 +38,7 @@ func createRunCommand() *cobra.Command {
 				return err
 			}
 
-			if _, err := os.Stat("go.mod"); err == nil {
+			if goPackages {
 				if err := policy.RunGolangChecks(); err != nil {
 					return err
 				}

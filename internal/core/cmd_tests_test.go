@@ -89,6 +89,45 @@ func Test_goTestCommands(t *testing.T) {
 	})
 }
 
+func Test_hasGoPackages(t *testing.T) {
+	t.Run("false when no go.mod", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		assert.False(t, hasGoPackages())
+	})
+
+	t.Run("false when go.mod has no packages", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		// A module with no Go source: "go vet ./..." would fail with
+		// "matched no packages", so Go checks must be skipped.
+		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
+
+		assert.False(t, hasGoPackages())
+	})
+
+	t.Run("true when go.mod has a package", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+
+		assert.True(t, hasGoPackages())
+	})
+}
+
 func Test_runGoTests(t *testing.T) {
 	t.Run("runs all commands in a valid go project", func(t *testing.T) {
 		tmpDir := t.TempDir()

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -25,7 +26,7 @@ func createTestsCommand() *cobra.Command {
 				return err
 			}
 
-			if _, err := os.Stat("go.mod"); err == nil {
+			if hasGoPackages() {
 				if err := runGoTests(cfg.Tests.Tags); err != nil {
 					return err
 				}
@@ -95,6 +96,28 @@ func goTestCommands(tags []string) []command {
 	}
 
 	return commands
+}
+
+// hasGoPackages reports whether the current directory is a Go module that
+// contains at least one Go package. A go.mod on its own is not enough: a module
+// may hold only indirect dependencies (for example a Hugo site pulling in a
+// theme) with no Go source, in which case "go vet ./..." fails with "matched no
+// packages". Gating Go checks on this avoids that false failure.
+func hasGoPackages() bool {
+	if _, err := os.Stat("go.mod"); err != nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+
+	// "go list ./..." prints one import path per package and nothing when the
+	// module has no packages. Parse stdout rather than trusting the exit code so
+	// the empty-module case is detected regardless of how the toolchain reports
+	// it.
+	out, _ := exec.CommandContext(ctx, "go", "list", "./...").Output()
+
+	return len(bytes.TrimSpace(out)) > 0
 }
 
 func runGoTests(tags []string) error {
