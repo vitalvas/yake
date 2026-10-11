@@ -1810,7 +1810,9 @@ func validateTestFileName(testPath string) []string {
 		}
 	}
 
-	if !isStandardTestFile(filename) {
+	standard := isStandardTestFile(testPath)
+
+	if !standard {
 		sourcePath := filepath.Join(dir, expectedSourceFile)
 
 		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
@@ -1818,7 +1820,7 @@ func validateTestFileName(testPath string) []string {
 		}
 	}
 
-	if !isStandardTestFile(filename) && !hasTestingImport(testPath) {
+	if !standard && !hasTestingImport(testPath) {
 		violations = append(violations, fmt.Sprintf("  - %s: missing 'testing' package import", testPath))
 	}
 
@@ -1924,8 +1926,92 @@ var standardTestFiles = map[string]bool{
 	"external_test.go": true,
 }
 
-func isStandardTestFile(filename string) bool {
-	return standardTestFiles[filename]
+// isStandardTestFile reports whether a test file needs no matching origin
+// source file and no 'testing' import. This holds for the conventional names
+// example_test.go and external_test.go, and for any *_test.go file that the Go
+// toolchain treats as an example file: one declaring at least one Example
+// function and no Test, Benchmark, or Fuzz functions (see
+// https://pkg.go.dev/testing#hdr-Examples). Example functions document a
+// package without a corresponding origin file and take no *testing.T, so they
+// are exempt from both requirements regardless of filename.
+func isStandardTestFile(testPath string) bool {
+	if standardTestFiles[filepath.Base(testPath)] {
+		return true
+	}
+
+	return isExampleFile(testPath)
+}
+
+// isExampleFile reports whether testPath is a Go example file: it declares at
+// least one top-level Example function and no Test, Benchmark, or Fuzz
+// functions. Matching mirrors the testing package's own conventions: Test,
+// Benchmark, and Fuzz names continue with an upper-case letter or end there,
+// while an Example name is either exactly "Example" or continues with an
+// upper-case letter or underscore.
+func isExampleFile(testPath string) bool {
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, testPath, nil, 0)
+	if err != nil {
+		return false
+	}
+
+	hasExample := false
+
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil {
+			continue
+		}
+
+		switch {
+		case isTestFuncName(fn.Name.Name, "Test"),
+			isTestFuncName(fn.Name.Name, "Benchmark"),
+			isTestFuncName(fn.Name.Name, "Fuzz"):
+			return false
+		case isExampleFuncName(fn.Name.Name):
+			hasExample = true
+		}
+	}
+
+	return hasExample
+}
+
+// isTestFuncName reports whether name is a testing entry point for the given
+// prefix (Test, Benchmark, or Fuzz): the bare prefix, or the prefix followed by
+// a non-lower-case letter as required by the testing package.
+func isTestFuncName(name, prefix string) bool {
+	if !strings.HasPrefix(name, prefix) {
+		return false
+	}
+
+	rest := name[len(prefix):]
+	if rest == "" {
+		return true
+	}
+
+	r := rune(rest[0])
+
+	return r < 'a' || r > 'z'
+}
+
+// isExampleFuncName reports whether name is an example function: exactly
+// "Example", or "Example" followed by an upper-case letter or underscore.
+func isExampleFuncName(name string) bool {
+	const prefix = "Example"
+
+	if !strings.HasPrefix(name, prefix) {
+		return false
+	}
+
+	rest := name[len(prefix):]
+	if rest == "" {
+		return true
+	}
+
+	r := rune(rest[0])
+
+	return r == '_' || (r >= 'A' && r <= 'Z')
 }
 
 func hasSkipDirective(filePath string) bool {

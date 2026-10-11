@@ -1118,20 +1118,77 @@ func Test_containsStringLit(t *testing.T) {
 }
 
 func Test_isStandardTestFile(t *testing.T) {
-	t.Run("example_test.go is standard", func(t *testing.T) {
+	t.Run("example_test.go is standard by conventional name", func(t *testing.T) {
 		assert.True(t, isStandardTestFile("example_test.go"))
 	})
 
-	t.Run("external_test.go is standard", func(t *testing.T) {
+	t.Run("external_test.go is standard by conventional name", func(t *testing.T) {
 		assert.True(t, isStandardTestFile("external_test.go"))
 	})
 
-	t.Run("service_test.go is not standard", func(t *testing.T) {
+	t.Run("service_test.go is not standard by name alone", func(t *testing.T) {
 		assert.False(t, isStandardTestFile("service_test.go"))
 	})
 
 	t.Run("regular file is not standard", func(t *testing.T) {
 		assert.False(t, isStandardTestFile("main.go"))
+	})
+
+	t.Run("example-only file is standard regardless of name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "reverse_test.go")
+		content := "package reverse\n\nimport \"fmt\"\n\nfunc ExampleReverse() {\n\tfmt.Println(\"x\")\n\t// Output: x\n}\n"
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		assert.True(t, isStandardTestFile(path))
+	})
+
+	t.Run("file with a Test function is not an example file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "client_example_test.go")
+		content := "package client\n\nimport (\n\t\"fmt\"\n\t\"testing\"\n)\n\nfunc ExampleClient() {\n\tfmt.Println(\"x\")\n\t// Output: x\n}\n\nfunc TestClient(t *testing.T) {}\n"
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+		assert.False(t, isStandardTestFile(path))
+	})
+}
+
+func Test_isExampleFuncName(t *testing.T) {
+	cases := map[string]bool{
+		"Example":          true,
+		"ExampleReverse":   true,
+		"ExampleT_M":       true,
+		"Example_suffix":   true,
+		"Examplething":     false,
+		"TestExample":      false,
+		"NotAnExample":     false,
+		"ExampleReverse_m": true,
+	}
+
+	for name, want := range cases {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, want, isExampleFuncName(name))
+		})
+	}
+}
+
+func Test_isTestFuncName(t *testing.T) {
+	t.Run("bare prefix is an entry point", func(t *testing.T) {
+		assert.True(t, isTestFuncName("Test", "Test"))
+	})
+
+	t.Run("upper-case continuation is an entry point", func(t *testing.T) {
+		assert.True(t, isTestFuncName("TestReverse", "Test"))
+		assert.True(t, isTestFuncName("BenchmarkReverse", "Benchmark"))
+		assert.True(t, isTestFuncName("FuzzReverse", "Fuzz"))
+	})
+
+	t.Run("lower-case continuation is not an entry point", func(t *testing.T) {
+		assert.False(t, isTestFuncName("Testing", "Test"))
+	})
+
+	t.Run("different prefix is not an entry point", func(t *testing.T) {
+		assert.False(t, isTestFuncName("ExampleReverse", "Test"))
 	})
 }
 
@@ -1289,6 +1346,38 @@ func Test_validateTestFileName(t *testing.T) {
 
 		violations := validateTestFileName("external_test.go")
 		assert.Empty(t, violations)
+	})
+
+	t.Run("allows example-only file without source or testing import", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		// A per-type example file carries Example funcs, no origin, no testing import.
+		exampleFile := "package test\n\nimport \"fmt\"\n\nfunc ExampleClient() {\n\tfmt.Println(\"hello\")\n\t// Output: hello\n}\n"
+		require.NoError(t, os.WriteFile("client_example_test.go", []byte(exampleFile), 0644))
+
+		violations := validateTestFileName("client_example_test.go")
+		assert.Empty(t, violations)
+	})
+
+	t.Run("example-named file with a Test function still needs source and import", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		// Despite the _example_test.go name, a Test function makes this a regular
+		// test file that must have an origin source and import testing.
+		mixedFile := "package test\n\nimport \"testing\"\n\nfunc TestClient(t *testing.T) {}\n"
+		require.NoError(t, os.WriteFile("client_example_test.go", []byte(mixedFile), 0644))
+
+		violations := validateTestFileName("client_example_test.go")
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "missing source file")
 	})
 
 	t.Run("test file in subdirectory", func(t *testing.T) {
