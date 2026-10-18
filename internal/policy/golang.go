@@ -2730,7 +2730,7 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, boo
 		return "", false
 	}
 
-	if !isUnnecessaryConversion(pkg, arg, resultType, argType) {
+	if !isUnnecessaryConversion(pkg, call, arg, resultType, argType) {
 		return "", false
 	}
 
@@ -2743,7 +2743,7 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, boo
 // resultType is either an identity conversion or a named-to-underlying
 // conversion. See conversionViolation for the rules and the untyped-constant
 // exclusion.
-func isUnnecessaryConversion(pkg *packages.Package, arg ast.Expr, resultType, argType types.Type) bool {
+func isUnnecessaryConversion(pkg *packages.Package, call *ast.CallExpr, arg ast.Expr, resultType, argType types.Type) bool {
 	if types.Identical(resultType, argType) {
 		if argTV, ok := pkg.TypesInfo.Types[arg]; ok && argTV.Value != nil {
 			return false
@@ -2752,9 +2752,25 @@ func isUnnecessaryConversion(pkg *packages.Package, arg ast.Expr, resultType, ar
 		return true
 	}
 
+	// byte() is a conventional spelling for wire or binary encoding (for example
+	// buf[0] = byte(h.Version)), where the conversion is required by the target
+	// []byte. Spare it even though byte is an alias for uint8.
+	if isByteConversion(call.Fun) {
+		return false
+	}
+
 	// Named to underlying: the operand's defined type reduces to resultType, and
 	// resultType is already an underlying type (not another defined type).
 	return !types.Identical(argType, argType.Underlying()) &&
 		types.Identical(resultType, argType.Underlying()) &&
 		types.Identical(resultType, resultType.Underlying())
+}
+
+// isByteConversion reports whether fun is the builtin byte conversion, written
+// literally as byte(...). byte and uint8 are identical to the type checker, so
+// the two spellings are distinguished at the syntax level.
+func isByteConversion(fun ast.Expr) bool {
+	ident, ok := fun.(*ast.Ident)
+
+	return ok && ident.Name == "byte"
 }

@@ -5131,6 +5131,24 @@ func Test_redundantConversions(t *testing.T) {
 		assert.Empty(t, redundantConversions(pkg))
 	})
 
+	t.Run("does not flag byte conversion of a named type", func(t *testing.T) {
+		// byte(h.Version) serializes a named type into a []byte and is required;
+		// the byte() spelling marks intentional wire encoding, so it is spared.
+		src := "package example\n\ntype Version uint8\n\nvar v Version = 1\n\nvar _ = byte(v)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("still flags uint8 conversion of a named type", func(t *testing.T) {
+		// Only the byte() spelling is spared; uint8() remains flagged.
+		src := "package example\n\ntype Version uint8\n\nvar v Version = 1\n\nvar _ = uint8(v)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		require.Len(t, redundantConversions(pkg), 1)
+		assert.Contains(t, redundantConversions(pkg)[0], "redundant conversion to 'uint8'")
+	})
+
 	t.Run("does not flag string to byte slice conversion", func(t *testing.T) {
 		src := "package example\n\nvar s string = \"x\"\n\nvar _ = []byte(s)\n"
 		pkg := buildTypedPackage(t, "example.go", src)
