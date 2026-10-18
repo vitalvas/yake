@@ -269,6 +269,24 @@ func resolvePackageOverrides(p *config.CoveragePolicy) map[string]float64 {
 	return p.PackageOverrides
 }
 
+// skippedDirs are directory names the policy walkers never descend into:
+// dependency and VCS metadata, dedicated test/example trees, and .tmp, the
+// agent's scratch directory, whose files are not project source.
+var skippedDirs = map[string]bool{
+	"vendor":   true,
+	".git":     true,
+	".tmp":     true,
+	"test":     true,
+	"tests":    true,
+	"examples": true,
+}
+
+// skipPolicyDir reports whether a directory with the given name must be skipped
+// by every policy walker.
+func skipPolicyDir(name string) bool {
+	return skippedDirs[name]
+}
+
 func checkEntryPoints(maxMainLines int) error {
 	log.Println("Checking entry point layout (root main.go vs cmd/**/main.go)...")
 
@@ -325,8 +343,7 @@ func findNonMainEntryPoints() []string {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -412,8 +429,7 @@ func checkStringConcat() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -498,8 +514,7 @@ func checkASCIIOnly() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -580,8 +595,7 @@ func checkStdlibWrappers() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -769,8 +783,7 @@ func checkFuncSignature(maxParams, maxResults int) error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -850,8 +863,7 @@ func checkCompositeLiteral(maxSingleLineFields int) error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -976,8 +988,7 @@ func checkPackageNaming(pattern string) error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -1044,8 +1055,7 @@ func checkStuttering() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -1176,8 +1186,7 @@ func checkGetterNaming() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -1522,8 +1531,7 @@ func checkPrivateExportedMethods() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -1659,8 +1667,7 @@ func checkNoInit() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -1736,8 +1743,7 @@ func checkTestFileNaming() error {
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
@@ -2319,8 +2325,7 @@ func findUncoveredLargeFunctions(profilePath string, maxUncoveredFuncLines int, 
 		}
 
 		if info.IsDir() {
-			switch info.Name() {
-			case "vendor", ".git", "test", "tests", "examples":
+			if skipPolicyDir(info.Name()) {
 				return filepath.SkipDir
 			}
 
