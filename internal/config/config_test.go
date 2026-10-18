@@ -51,6 +51,8 @@ func TestLoad(t *testing.T) {
     enable: false
   string_concat:
     enable: false
+  redundant_conversion:
+    enable: false
 tests:
   tags:
     - integration
@@ -70,6 +72,7 @@ tests:
 		assert.Equal(t, "^[a-z]{2,16}$", *cfg.Policy.PackageNaming.Pattern)
 		assert.False(t, *cfg.Policy.ASCIIOnly.Enabled)
 		assert.False(t, *cfg.Policy.StringConcat.Enabled)
+		assert.False(t, *cfg.Policy.RedundantConversion.Enabled)
 		assert.Equal(t, []string{"integration", "e2e"}, cfg.Tests.Tags)
 	})
 

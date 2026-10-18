@@ -47,6 +47,7 @@ type PolicyConfig struct {
 	TestFileNaming         *PolicyToggle           `yaml:"test_file_naming"`
 	TestDuration           *TestDurationPolicy     `yaml:"test_duration"`
 	Coverage               *CoveragePolicy         `yaml:"coverage"`
+	RedundantConversion    *PolicyToggle           `yaml:"redundant_conversion"`
 }
 
 type PolicyToggle struct {

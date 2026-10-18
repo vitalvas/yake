@@ -3,8 +3,10 @@ package policy
 import (
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/tools/go/packages"
 
 	"github.com/vitalvas/yake/internal/config"
 )
@@ -5025,4 +5028,248 @@ func Test_resolveCoverage(t *testing.T) {
 	assert.Equal(t, 40, resolveMaxUncoveredFuncLines(p))
 	assert.Equal(t, []string{"internal/cmd"}, resolveExcludePackages(p))
 	assert.Equal(t, map[string]float64{"internal/cmd": 40.0}, resolvePackageOverrides(p))
+}
+
+// buildTypedPackage type-checks src as a single-file package and returns a
+// packages.Package populated with the fields redundantConversions reads. The
+// file is recorded under filename so tests can exercise .pb.go and skip
+// directive handling without touching disk.
+func buildTypedPackage(t *testing.T, filename, src string) *packages.Package {
+	t.Helper()
+
+	fset := token.NewFileSet()
+
+	file, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
+	require.NoError(t, err)
+
+	info := &types.Info{
+		Types: make(map[ast.Expr]types.TypeAndValue),
+	}
+
+	conf := types.Config{Importer: importer.Default()}
+
+	_, err = conf.Check("example", fset, []*ast.File{file}, info)
+	require.NoError(t, err)
+
+	return &packages.Package{
+		Fset:      fset,
+		Syntax:    []*ast.File{file},
+		TypesInfo: info,
+	}
+}
+
+func Test_redundantConversions(t *testing.T) {
+	t.Run("flags string conversion of a string operand", func(t *testing.T) {
+		src := "package example\n\nvar test string = \"hello\"\n\nvar _ = string(test)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		got := redundantConversions(pkg)
+
+		require.Len(t, got, 1)
+		assert.Contains(t, got[0], "redundant conversion to 'string'")
+	})
+
+	t.Run("flags identity conversion of a numeric operand", func(t *testing.T) {
+		src := "package example\n\nvar u uint8 = 1\n\nvar _ = uint8(u)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		got := redundantConversions(pkg)
+
+		require.Len(t, got, 1)
+		assert.Contains(t, got[0], "redundant conversion to 'uint8'")
+	})
+
+	t.Run("does not flag conversion to underlying of a named type", func(t *testing.T) {
+		// uint8(AuthenStatusPass) is required: AuthenStatus and uint8 are
+		// distinct types, so dropping the conversion would not compile.
+		src := "package example\n\ntype AuthenStatus uint8\n\nconst AuthenStatusPass AuthenStatus = 0x01\n\nvar _ = uint8(AuthenStatusPass)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag conversion from named type back to itself source", func(t *testing.T) {
+		// The field is uint8; the constant is a named type: the conversion is
+		// necessary, mirroring the reported table-test case.
+		src := "package example\n\ntype AuthenStatus uint8\n\nconst AuthenStatusPass AuthenStatus = 0x01\n\nvar _ = struct{ got uint8 }{uint8(AuthenStatusPass)}\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag string to byte slice conversion", func(t *testing.T) {
+		src := "package example\n\nvar s string = \"x\"\n\nvar _ = []byte(s)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag byte slice to string conversion", func(t *testing.T) {
+		src := "package example\n\nvar b []byte\n\nvar _ = string(b)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag an ordinary function call", func(t *testing.T) {
+		src := "package example\n\nfunc id(s string) string { return s }\n\nvar _ = id(\"x\")\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag conversion of an untyped constant literal", func(t *testing.T) {
+		// byte('\n') pins the untyped rune's type; it is not redundant.
+		src := "package example\n\nvar _ = byte('\\n')\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag conversion of a typed constant", func(t *testing.T) {
+		// Constant operands are never flagged, even when already typed.
+		src := "package example\n\nconst c byte = 2\n\nvar _ = byte(c)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("flags identity conversion of a named type to itself", func(t *testing.T) {
+		src := "package example\n\ntype Celsius float64\n\nvar c Celsius = 1\n\nvar _ = Celsius(c)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		require.Len(t, redundantConversions(pkg), 1)
+		assert.Contains(t, redundantConversions(pkg)[0], "redundant conversion to 'example.Celsius'")
+	})
+
+	t.Run("skips generated protobuf files", func(t *testing.T) {
+		src := "package example\n\nvar test string = \"hello\"\n\nvar _ = string(test)\n"
+		pkg := buildTypedPackage(t, "service.pb.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("honors the skip directive", func(t *testing.T) {
+		src := "//yake:skip-test\npackage example\n\nvar test string = \"hello\"\n\nvar _ = string(test)\n"
+
+		// hasSkipDirective reads the file from disk, so write it to a temp dir
+		// and record that path in the package.
+		dir := t.TempDir()
+		path := filepath.Join(dir, "example.go")
+		require.NoError(t, os.WriteFile(path, []byte(src), 0644))
+
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, src, parser.ParseComments)
+		require.NoError(t, err)
+
+		info := &types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
+		conf := types.Config{Importer: importer.Default()}
+		_, err = conf.Check("example", fset, []*ast.File{file}, info)
+		require.NoError(t, err)
+
+		skipPkg := &packages.Package{Fset: fset, Syntax: []*ast.File{file}, TypesInfo: info}
+
+		assert.Empty(t, redundantConversions(skipPkg))
+	})
+
+	t.Run("returns nil when type info is missing", func(t *testing.T) {
+		assert.Nil(t, redundantConversions(&packages.Package{}))
+	})
+}
+
+func Test_conversionViolation(t *testing.T) {
+	t.Run("ignores a variadic spread call", func(t *testing.T) {
+		src := "package example\n\nfunc variadic(xs ...int) {}\n\nfunc caller(xs []int) { variadic(xs...) }\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+}
+
+func Test_checkRedundantConversion(t *testing.T) {
+	t.Run("detects a redundant conversion in a real module", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n\ngo 1.25\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {\n\tvar s string = \"x\"\n\t_ = string(s)\n}\n"), 0644))
+
+		err := checkRedundantConversion()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "redundant type conversion")
+		assert.Contains(t, err.Error(), "main.go")
+	})
+
+	t.Run("passes a module with only necessary conversions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n\ngo 1.25\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\ntype Status uint8\n\nconst StatusPass Status = 0x01\n\nfunc main() {\n\tvar got uint8 = uint8(StatusPass)\n\t_ = got\n}\n"), 0644))
+
+		assert.NoError(t, checkRedundantConversion())
+	})
+}
+
+func Benchmark_redundantConversions(b *testing.B) {
+	src := "package example\n\nvar test string = \"hello\"\n\nvar u uint8 = 1\n\nvar _ = string(test)\n\nvar _ = uint8(u)\n"
+
+	fset := token.NewFileSet()
+
+	file, err := parser.ParseFile(fset, "example.go", src, parser.ParseComments)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	info := &types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
+
+	conf := types.Config{Importer: importer.Default()}
+	if _, err := conf.Check("example", fset, []*ast.File{file}, info); err != nil {
+		b.Fatal(err)
+	}
+
+	pkg := &packages.Package{Fset: fset, Syntax: []*ast.File{file}, TypesInfo: info}
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_ = redundantConversions(pkg)
+	}
+}
+
+func Fuzz_redundantConversions(f *testing.F) {
+	f.Add("package example\n\nvar test string = \"x\"\n\nvar _ = string(test)\n")
+	f.Add("package example\n\nvar u uint8 = 1\n\nvar _ = uint8(u)\n")
+	f.Add("package example\n\ntype T uint8\n\nvar _ = uint8(T(1))\n")
+
+	f.Fuzz(func(_ *testing.T, src string) {
+		fset := token.NewFileSet()
+
+		file, err := parser.ParseFile(fset, "example.go", src, parser.ParseComments)
+		if err != nil {
+			return
+		}
+
+		info := &types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
+
+		conf := types.Config{
+			Importer: importer.Default(),
+			Error:    func(error) {},
+		}
+
+		// Ignore type errors: fuzzing feeds arbitrary source, and partial type
+		// info must never make redundantConversions panic.
+		_, _ = conf.Check("example", fset, []*ast.File{file}, info)
+
+		pkg := &packages.Package{Fset: fset, Syntax: []*ast.File{file}, TypesInfo: info}
+
+		_ = redundantConversions(pkg)
+	})
 }

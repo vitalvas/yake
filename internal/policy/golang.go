@@ -8,15 +8,19 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/tools/go/packages"
 
 	"github.com/vitalvas/yake/internal/config"
 )
@@ -133,6 +137,10 @@ func golangPolicyChecks(cfg *config.Config) []golangPolicyCheck {
 					packageOverrides:      resolvePackageOverrides(cfg.Policy.Coverage),
 				})
 			},
+		},
+		{
+			section: cfg.Policy.RedundantConversion,
+			run:     checkRedundantConversion,
 		},
 	}
 }
@@ -2601,4 +2609,125 @@ func packageNeedsTests(dir string) bool {
 	}
 
 	return false
+}
+
+func checkRedundantConversion() error {
+	log.Println("Checking for redundant type conversions...")
+
+	// Tests: true so example and test files are analyzed; redundant conversions
+	// commonly appear there (for example string(s) or uint8(u) in table tests).
+	cfg := &packages.Config{
+		Mode:  packages.NeedName | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+		Tests: true,
+	}
+
+	pkgs, err := packages.Load(cfg, "./...")
+	if err != nil {
+		return fmt.Errorf("failed to load packages: %w", err)
+	}
+
+	var violations []string
+
+	seen := make(map[string]bool)
+
+	for _, pkg := range pkgs {
+		for _, v := range redundantConversions(pkg) {
+			// go/packages reports a test package and its base package separately,
+			// so the same file is analyzed twice; deduplicate by message.
+			if seen[v] {
+				continue
+			}
+
+			seen[v] = true
+			violations = append(violations, v)
+		}
+	}
+
+	sort.Strings(violations)
+
+	if len(violations) > 0 {
+		return fmt.Errorf("redundant type conversion violations (operand already has the target type; drop the conversion):\n%s",
+			strings.Join(violations, "\n"))
+	}
+
+	return nil
+}
+
+// redundantConversions returns one violation per redundant conversion in pkg: a
+// conversion T(x) whose operand x already has type T, making the conversion a
+// no-op. Generated .pb.go files and files carrying the skip directive are
+// ignored. It relies on type information, so a package that failed to type
+// check (nil TypesInfo) yields nothing.
+func redundantConversions(pkg *packages.Package) []string {
+	if pkg.TypesInfo == nil || pkg.Fset == nil {
+		return nil
+	}
+
+	var violations []string
+
+	for _, file := range pkg.Syntax {
+		path := pkg.Fset.Position(file.Pos()).Filename
+
+		if strings.HasSuffix(path, ".pb.go") || hasSkipDirective(path) {
+			continue
+		}
+
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+
+			if v, ok := conversionViolation(pkg, call); ok {
+				violations = append(violations, v)
+			}
+
+			return true
+		})
+	}
+
+	return violations
+}
+
+// conversionViolation reports whether call is a redundant type conversion and,
+// if so, returns the formatted violation. A call is a conversion when its Fun
+// denotes a type; it is redundant when the operand's type is identical to the
+// conversion's result type.
+//
+// Conversions of a constant operand are never flagged. An untyped constant such
+// as '\n' or 1 has no type of its own: the conversion is what pins it, and the
+// type checker propagates the target type onto the operand, so a type
+// comparison would always match and wrongly flag byte('\n') and the like. Only
+// conversions of typed, non-constant operands are reported.
+func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, bool) {
+	// A conversion takes exactly one argument and must not be a "..." spread.
+	if len(call.Args) != 1 || call.Ellipsis.IsValid() {
+		return "", false
+	}
+
+	funType, ok := pkg.TypesInfo.Types[call.Fun]
+	if !ok || !funType.IsType() {
+		return "", false
+	}
+
+	arg := call.Args[0]
+
+	if argTV, ok := pkg.TypesInfo.Types[arg]; ok && argTV.Value != nil {
+		return "", false
+	}
+
+	resultType := pkg.TypesInfo.TypeOf(call)
+	argType := pkg.TypesInfo.TypeOf(arg)
+
+	if resultType == nil || argType == nil {
+		return "", false
+	}
+
+	if !types.Identical(resultType, argType) {
+		return "", false
+	}
+
+	pos := pkg.Fset.Position(call.Pos())
+
+	return fmt.Sprintf("  - %s:%d: redundant conversion to '%s'", pos.Filename, pos.Line, resultType.String()), true
 }
