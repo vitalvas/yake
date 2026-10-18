@@ -2694,16 +2694,22 @@ func redundantConversions(pkg *packages.Package) []string {
 	return violations
 }
 
-// conversionViolation reports whether call is a redundant type conversion and,
-// if so, returns the formatted violation. A call is a conversion when its Fun
-// denotes a type; it is redundant when the operand's type is identical to the
-// conversion's result type.
+// conversionViolation reports whether call is an unnecessary type conversion
+// and, if so, returns the formatted violation. A call is a conversion when its
+// Fun denotes a type. Two shapes are unnecessary:
 //
-// Conversions of a constant operand are never flagged. An untyped constant such
-// as '\n' or 1 has no type of its own: the conversion is what pins it, and the
-// type checker propagates the target type onto the operand, so a type
-// comparison would always match and wrongly flag byte('\n') and the like. Only
-// conversions of typed, non-constant operands are reported.
+//   - Identity: the operand already has the result type (for example
+//     string(s) where s is a string). Constant operands are excluded here: an
+//     untyped constant such as '\n' has no type of its own, the conversion is
+//     what pins it, and the type checker propagates the target type onto the
+//     operand, so a type comparison would wrongly flag byte('\n').
+//   - Named to underlying: the operand has a defined type whose underlying type
+//     is the result type, and the result type is itself an underlying type (for
+//     example uint8(PacketType) where type PacketType uint8). The named value
+//     is usable directly, so the conversion adds nothing.
+//
+// A conversion from an underlying type to a named type, or between two distinct
+// named types, is required and is never flagged.
 func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, bool) {
 	// A conversion takes exactly one argument and must not be a "..." spread.
 	if len(call.Args) != 1 || call.Ellipsis.IsValid() {
@@ -2717,10 +2723,6 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, boo
 
 	arg := call.Args[0]
 
-	if argTV, ok := pkg.TypesInfo.Types[arg]; ok && argTV.Value != nil {
-		return "", false
-	}
-
 	resultType := pkg.TypesInfo.TypeOf(call)
 	argType := pkg.TypesInfo.TypeOf(arg)
 
@@ -2728,11 +2730,31 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, boo
 		return "", false
 	}
 
-	if !types.Identical(resultType, argType) {
+	if !isUnnecessaryConversion(pkg, arg, resultType, argType) {
 		return "", false
 	}
 
 	pos := pkg.Fset.Position(call.Pos())
 
 	return fmt.Sprintf("  - %s:%d: redundant conversion to '%s'", pos.Filename, pos.Line, resultType.String()), true
+}
+
+// isUnnecessaryConversion reports whether converting arg (of argType) to
+// resultType is either an identity conversion or a named-to-underlying
+// conversion. See conversionViolation for the rules and the untyped-constant
+// exclusion.
+func isUnnecessaryConversion(pkg *packages.Package, arg ast.Expr, resultType, argType types.Type) bool {
+	if types.Identical(resultType, argType) {
+		if argTV, ok := pkg.TypesInfo.Types[arg]; ok && argTV.Value != nil {
+			return false
+		}
+
+		return true
+	}
+
+	// Named to underlying: the operand's defined type reduces to resultType, and
+	// resultType is already an underlying type (not another defined type).
+	return !types.Identical(argType, argType.Underlying()) &&
+		types.Identical(resultType, argType.Underlying()) &&
+		types.Identical(resultType, resultType.Underlying())
 }

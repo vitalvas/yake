@@ -5095,19 +5095,37 @@ func Test_redundantConversions(t *testing.T) {
 		assert.Contains(t, got[0], "redundant conversion to 'uint8'")
 	})
 
-	t.Run("does not flag conversion to underlying of a named type", func(t *testing.T) {
-		// uint8(AuthenStatusPass) is required: AuthenStatus and uint8 are
-		// distinct types, so dropping the conversion would not compile.
+	t.Run("flags conversion of a named type to its underlying type", func(t *testing.T) {
+		// uint8(AuthenStatusPass): the named constant converted to its own
+		// underlying type is an unnecessary conversion the author can drop.
 		src := "package example\n\ntype AuthenStatus uint8\n\nconst AuthenStatusPass AuthenStatus = 0x01\n\nvar _ = uint8(AuthenStatusPass)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		require.Len(t, redundantConversions(pkg), 1)
+		assert.Contains(t, redundantConversions(pkg)[0], "redundant conversion to 'uint8'")
+	})
+
+	t.Run("flags conversion of a named type variable to its underlying type", func(t *testing.T) {
+		src := "package example\n\ntype MyString string\n\nvar m MyString = \"x\"\n\nvar _ = string(m)\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		require.Len(t, redundantConversions(pkg), 1)
+		assert.Contains(t, redundantConversions(pkg)[0], "redundant conversion to 'string'")
+	})
+
+	t.Run("does not flag conversion from underlying type to a named type", func(t *testing.T) {
+		// AuthenStatus(u) widens uint8 to the named type: it is required, not
+		// removable.
+		src := "package example\n\ntype AuthenStatus uint8\n\nvar u uint8 = 1\n\nvar _ = AuthenStatus(u)\n"
 		pkg := buildTypedPackage(t, "example.go", src)
 
 		assert.Empty(t, redundantConversions(pkg))
 	})
 
-	t.Run("does not flag conversion from named type back to itself source", func(t *testing.T) {
-		// The field is uint8; the constant is a named type: the conversion is
-		// necessary, mirroring the reported table-test case.
-		src := "package example\n\ntype AuthenStatus uint8\n\nconst AuthenStatusPass AuthenStatus = 0x01\n\nvar _ = struct{ got uint8 }{uint8(AuthenStatusPass)}\n"
+	t.Run("does not flag conversion between two named types", func(t *testing.T) {
+		// Converting between distinct named types with the same underlying type
+		// is required and cannot be dropped.
+		src := "package example\n\ntype A uint8\n\ntype B uint8\n\nvar a A = 1\n\nvar _ = B(a)\n"
 		pkg := buildTypedPackage(t, "example.go", src)
 
 		assert.Empty(t, redundantConversions(pkg))
@@ -5220,6 +5238,22 @@ func Test_checkRedundantConversion(t *testing.T) {
 		assert.Contains(t, err.Error(), "main.go")
 	})
 
+	t.Run("detects a named type converted to its underlying type", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n\ngo 1.25\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\ntype Status uint8\n\nconst StatusPass Status = 0x01\n\nfunc main() {\n\t_ = uint8(StatusPass)\n}\n"), 0644))
+
+		err := checkRedundantConversion()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "redundant conversion to 'uint8'")
+	})
+
 	t.Run("passes a module with only necessary conversions", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
@@ -5228,7 +5262,8 @@ func Test_checkRedundantConversion(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		require.NoError(t, os.WriteFile("go.mod", []byte("module example.com/test\n\ngo 1.25\n"), 0644))
-		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\ntype Status uint8\n\nconst StatusPass Status = 0x01\n\nfunc main() {\n\tvar got uint8 = uint8(StatusPass)\n\t_ = got\n}\n"), 0644))
+		// Status(u) widens uint8 to the named type: a required conversion.
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\ntype Status uint8\n\nfunc main() {\n\tvar u uint8 = 1\n\t_ = Status(u)\n}\n"), 0644))
 
 		assert.NoError(t, checkRedundantConversion())
 	})
