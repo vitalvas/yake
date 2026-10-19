@@ -2807,7 +2807,7 @@ func requiresUnderlyingContext(parent ast.Node) bool {
 	switch p := parent.(type) {
 	case *ast.AssignStmt:
 		return !assignsOnlyToBlank(p)
-	case *ast.ReturnStmt, *ast.CallExpr, *ast.CompositeLit, *ast.KeyValueExpr:
+	case *ast.ReturnStmt, *ast.CallExpr, *ast.CompositeLit, *ast.KeyValueExpr, *ast.BinaryExpr:
 		return true
 	default:
 		return false

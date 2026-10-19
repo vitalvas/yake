@@ -5162,6 +5162,15 @@ func Test_redundantConversions(t *testing.T) {
 		assert.Empty(t, redundantConversions(pkg))
 	})
 
+	t.Run("does not flag named-to-underlying conversion in a comparison", func(t *testing.T) {
+		// data[0] != byte(AuthenStatusPass): the conversion is required to compare
+		// the named constant against the byte element.
+		src := "package example\n\ntype AuthenStatus uint8\n\nconst AuthenStatusPass AuthenStatus = 0x01\n\nfunc check(data []byte) bool { return data[0] != byte(AuthenStatusPass) }\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
 	t.Run("does not flag string to byte slice conversion", func(t *testing.T) {
 		src := "package example\n\nvar s string = \"x\"\n\nvar _ = []byte(s)\n"
 		pkg := buildTypedPackage(t, "example.go", src)
