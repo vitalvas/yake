@@ -28,12 +28,27 @@ func assertCommandBehavior(t *testing.T, createCmd func() *cobra.Command, expect
 		assert.True(t, cmd.Runnable())
 	})
 
-	t.Run("returns nil when no project files exist", func(t *testing.T) {
+	t.Run("errors outside the project root", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()
 		defer os.Chdir(originalDir)
 
 		os.Chdir(tmpDir)
+
+		cmd := createCmd()
+		err := cmd.RunE(cmd, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "project root")
+	})
+
+	t.Run("passes at the project root with no project files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.Mkdir(".git", 0755))
 
 		cmd := createCmd()
 		err := cmd.RunE(cmd, nil)
@@ -47,6 +62,7 @@ func assertCommandBehavior(t *testing.T, createCmd func() *cobra.Command, expect
 
 		os.Chdir(tmpDir)
 
+		require.NoError(t, os.Mkdir(".git", 0755))
 		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 

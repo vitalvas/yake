@@ -21,6 +21,10 @@ func createTestsCommand() *cobra.Command {
 		Use:   "tests",
 		Short: "Run tests with coverage, race detection, and linting",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := ensureProjectRoot(); err != nil {
+				return err
+			}
+
 			cfg, err := config.Load()
 			if err != nil {
 				return err
@@ -114,8 +118,9 @@ func hasGoPackages() bool {
 	// "go list ./..." prints one import path per package and nothing when the
 	// module has no packages. Parse stdout rather than trusting the exit code so
 	// the empty-module case is detected regardless of how the toolchain reports
-	// it.
-	out, _ := exec.CommandContext(ctx, "go", "list", "./...").Output()
+	// it. -buildvcs=false keeps a failing VCS stamp (common when a .git exists
+	// but git errors) from emptying the output and hiding the packages.
+	out, _ := exec.CommandContext(ctx, "go", "list", "-buildvcs=false", "./...").Output()
 
 	return len(bytes.TrimSpace(out)) > 0
 }

@@ -437,8 +437,10 @@ func TestCreateTestsCommand(t *testing.T) {
 
 		os.Chdir(tmpDir)
 
+		require.NoError(t, os.Mkdir(".git", 0755))
 		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
-		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() { invalid }\n"), 0644))
+		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
+		require.NoError(t, os.WriteFile("main_test.go", []byte("package main\n\nimport \"testing\"\n\nfunc TestFail(t *testing.T) { t.Fatal(\"boom\") }\n"), 0644))
 
 		cmd := createTestsCommand()
 		err := cmd.RunE(cmd, nil)
