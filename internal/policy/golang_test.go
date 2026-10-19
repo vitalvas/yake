@@ -5171,6 +5171,25 @@ func Test_redundantConversions(t *testing.T) {
 		assert.Empty(t, redundantConversions(pkg))
 	})
 
+	t.Run("does not flag named-to-underlying conversion through a unary wrapper", func(t *testing.T) {
+		// -int64(time.Hour): the minus wraps the conversion, but the int64 field
+		// in the composite literal still forces it. Dropping it fails to compile.
+		src := "package example\n\nimport \"time\"\n\ntype entry struct{ v int64 }\n\nvar m = map[string]entry{}\n\nfunc f() { m[\"old\"] = entry{v: -int64(time.Hour)} }\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag conversion pinning an untyped shift operand", func(t *testing.T) {
+		// byte((1 << n) - 1): n is a variable, so the shift's untyped-constant
+		// left operand adopts byte only because of the conversion. Dropping it
+		// leaves an int, which breaks the following byte-and.
+		src := "package example\n\nfunc f(n int, b byte) bool { mask := byte((1 << n) - 1); return (b & mask) == 0 }\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
 	t.Run("does not flag string to byte slice conversion", func(t *testing.T) {
 		src := "package example\n\nvar s string = \"x\"\n\nvar _ = []byte(s)\n"
 		pkg := buildTypedPackage(t, "example.go", src)

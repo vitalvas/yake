@@ -2685,7 +2685,7 @@ func redundantConversions(pkg *packages.Package) []string {
 				return true
 			}
 
-			if v, ok := conversionViolation(pkg, call, parents[call]); ok {
+			if v, ok := conversionViolation(pkg, call, parents); ok {
 				violations = append(violations, v)
 			}
 
@@ -2740,7 +2740,7 @@ func parentMap(file *ast.File) map[ast.Node]ast.Node {
 //
 // A conversion from an underlying type to a named type, or between two distinct
 // named types, is required and is never flagged.
-func conversionViolation(pkg *packages.Package, call *ast.CallExpr, parent ast.Node) (string, bool) {
+func conversionViolation(pkg *packages.Package, call *ast.CallExpr, parents map[ast.Node]ast.Node) (string, bool) {
 	// A conversion takes exactly one argument and must not be a "..." spread.
 	if len(call.Args) != 1 || call.Ellipsis.IsValid() {
 		return "", false
@@ -2760,7 +2760,7 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr, parent ast.N
 		return "", false
 	}
 
-	if !isUnnecessaryConversion(pkg, arg, parent, resultType, argType) {
+	if !isUnnecessaryConversion(pkg, call, parents, resultType, argType) {
 		return "", false
 	}
 
@@ -2769,13 +2769,23 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr, parent ast.N
 	return fmt.Sprintf("  - %s:%d: redundant conversion to '%s'", pos.Filename, pos.Line, resultType.String()), true
 }
 
-// isUnnecessaryConversion reports whether converting arg (of argType) to
-// resultType is either an identity conversion or a droppable named-to-underlying
-// conversion. See conversionViolation for the rules and the untyped-constant
-// exclusion.
-func isUnnecessaryConversion(pkg *packages.Package, arg ast.Expr, parent ast.Node, resultType, argType types.Type) bool {
+// isUnnecessaryConversion reports whether the conversion call (to resultType,
+// from an operand of argType) is either an identity conversion or a droppable
+// named-to-underlying conversion. See conversionViolation for the rules and the
+// untyped-constant exclusion.
+func isUnnecessaryConversion(pkg *packages.Package, call *ast.CallExpr, parents map[ast.Node]ast.Node, resultType, argType types.Type) bool {
+	arg := call.Args[0]
+
 	if types.Identical(resultType, argType) {
 		if argTV, ok := pkg.TypesInfo.Types[arg]; ok && argTV.Value != nil {
+			return false
+		}
+
+		// The type checker back-propagates the conversion's target type onto an
+		// untyped-constant left operand of a non-constant shift, so argType then
+		// equals resultType and the conversion looks like a no-op. Dropping it
+		// removes the type that pins the shift result, so it is required.
+		if pinsUntypedShift(pkg, arg) {
 			return false
 		}
 
@@ -2796,21 +2806,56 @@ func isUnnecessaryConversion(pkg *packages.Package, arg ast.Expr, parent ast.Nod
 	// demands the underlying type (a return, an assignment, a call argument, or a
 	// composite-literal element), as in return uint8(h.Version & 0x0F) or
 	// buf[0] = byte(h.Version).
-	return !requiresUnderlyingContext(parent)
+	return !requiresUnderlyingContext(call, parents)
 }
 
-// requiresUnderlyingContext reports whether parent is a position that forces a
-// named value to be converted to its underlying type, making the conversion
-// required rather than droppable. An assignment solely to the blank identifier
-// imposes no type and does not count.
-func requiresUnderlyingContext(parent ast.Node) bool {
-	switch p := parent.(type) {
-	case *ast.AssignStmt:
-		return !assignsOnlyToBlank(p)
-	case *ast.ReturnStmt, *ast.CallExpr, *ast.CompositeLit, *ast.KeyValueExpr, *ast.BinaryExpr:
+// pinsUntypedShift reports whether arg is a non-constant expression whose value
+// depends on a shift with an untyped-constant left operand (for example
+// (1 << n) - 1 where n is a variable). The conversion wrapping such an operand
+// supplies the type the shift result adopts, so it is not redundant.
+func pinsUntypedShift(pkg *packages.Package, arg ast.Expr) bool {
+	found := false
+
+	ast.Inspect(arg, func(n ast.Node) bool {
+		bin, ok := n.(*ast.BinaryExpr)
+		if !ok || bin.Op != token.SHL && bin.Op != token.SHR {
+			return true
+		}
+
+		if tv, ok := pkg.TypesInfo.Types[bin.X]; ok && tv.Value != nil {
+			found = true
+
+			return false
+		}
+
 		return true
-	default:
-		return false
+	})
+
+	return found
+}
+
+// requiresUnderlyingContext reports whether the conversion node's surrounding
+// context forces a named value to be converted to its underlying type, making
+// the conversion required rather than droppable. It climbs past unary and
+// parenthesized wrappers (for example the minus in -int64(time.Hour)) so a
+// conversion feeding a typed context through such a wrapper is still recognized.
+// An assignment solely to the blank identifier imposes no type and does not
+// count.
+func requiresUnderlyingContext(node ast.Node, parents map[ast.Node]ast.Node) bool {
+	parent := parents[node]
+
+	for {
+		switch p := parent.(type) {
+		case *ast.ParenExpr, *ast.UnaryExpr:
+			node = parent
+			parent = parents[node]
+		case *ast.AssignStmt:
+			return !assignsOnlyToBlank(p)
+		case *ast.ReturnStmt, *ast.CallExpr, *ast.CompositeLit, *ast.KeyValueExpr, *ast.BinaryExpr:
+			return true
+		default:
+			return false
+		}
 	}
 }
 
