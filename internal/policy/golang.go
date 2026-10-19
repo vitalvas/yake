@@ -2677,13 +2677,15 @@ func redundantConversions(pkg *packages.Package) []string {
 			continue
 		}
 
+		parents := parentMap(file)
+
 		ast.Inspect(file, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {
 				return true
 			}
 
-			if v, ok := conversionViolation(pkg, call); ok {
+			if v, ok := conversionViolation(pkg, call, parents[call]); ok {
 				violations = append(violations, v)
 			}
 
@@ -2692,6 +2694,32 @@ func redundantConversions(pkg *packages.Package) []string {
 	}
 
 	return violations
+}
+
+// parentMap returns each node's immediate parent within file, so a conversion's
+// surrounding context can be inspected.
+func parentMap(file *ast.File) map[ast.Node]ast.Node {
+	parents := make(map[ast.Node]ast.Node)
+
+	var stack []ast.Node
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		if n == nil {
+			stack = stack[:len(stack)-1]
+
+			return true
+		}
+
+		if len(stack) > 0 {
+			parents[n] = stack[len(stack)-1]
+		}
+
+		stack = append(stack, n)
+
+		return true
+	})
+
+	return parents
 }
 
 // conversionViolation reports whether call is an unnecessary type conversion
@@ -2706,11 +2734,13 @@ func redundantConversions(pkg *packages.Package) []string {
 //   - Named to underlying: the operand has a defined type whose underlying type
 //     is the result type, and the result type is itself an underlying type (for
 //     example uint8(PacketType) where type PacketType uint8). The named value
-//     is usable directly, so the conversion adds nothing.
+//     is usable directly, so the conversion adds nothing - unless it feeds a
+//     context that requires the underlying type (see requiresUnderlyingContext),
+//     where the conversion is mandatory.
 //
 // A conversion from an underlying type to a named type, or between two distinct
 // named types, is required and is never flagged.
-func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, bool) {
+func conversionViolation(pkg *packages.Package, call *ast.CallExpr, parent ast.Node) (string, bool) {
 	// A conversion takes exactly one argument and must not be a "..." spread.
 	if len(call.Args) != 1 || call.Ellipsis.IsValid() {
 		return "", false
@@ -2730,7 +2760,7 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, boo
 		return "", false
 	}
 
-	if !isUnnecessaryConversion(pkg, call, arg, resultType, argType) {
+	if !isUnnecessaryConversion(pkg, arg, parent, resultType, argType) {
 		return "", false
 	}
 
@@ -2740,10 +2770,10 @@ func conversionViolation(pkg *packages.Package, call *ast.CallExpr) (string, boo
 }
 
 // isUnnecessaryConversion reports whether converting arg (of argType) to
-// resultType is either an identity conversion or a named-to-underlying
+// resultType is either an identity conversion or a droppable named-to-underlying
 // conversion. See conversionViolation for the rules and the untyped-constant
 // exclusion.
-func isUnnecessaryConversion(pkg *packages.Package, call *ast.CallExpr, arg ast.Expr, resultType, argType types.Type) bool {
+func isUnnecessaryConversion(pkg *packages.Package, arg ast.Expr, parent ast.Node, resultType, argType types.Type) bool {
 	if types.Identical(resultType, argType) {
 		if argTV, ok := pkg.TypesInfo.Types[arg]; ok && argTV.Value != nil {
 			return false
@@ -2752,25 +2782,47 @@ func isUnnecessaryConversion(pkg *packages.Package, call *ast.CallExpr, arg ast.
 		return true
 	}
 
-	// byte() is a conventional spelling for wire or binary encoding (for example
-	// buf[0] = byte(h.Version)), where the conversion is required by the target
-	// []byte. Spare it even though byte is an alias for uint8.
-	if isByteConversion(call.Fun) {
+	// Named to underlying: the operand's defined type reduces to resultType, and
+	// resultType is already an underlying type (not another defined type).
+	namedToUnderlying := !types.Identical(argType, argType.Underlying()) &&
+		types.Identical(resultType, argType.Underlying()) &&
+		types.Identical(resultType, resultType.Underlying())
+
+	if !namedToUnderlying {
 		return false
 	}
 
-	// Named to underlying: the operand's defined type reduces to resultType, and
-	// resultType is already an underlying type (not another defined type).
-	return !types.Identical(argType, argType.Underlying()) &&
-		types.Identical(resultType, argType.Underlying()) &&
-		types.Identical(resultType, resultType.Underlying())
+	// The conversion is mandatory when its result is consumed by a context that
+	// demands the underlying type (a return, an assignment, a call argument, or a
+	// composite-literal element), as in return uint8(h.Version & 0x0F) or
+	// buf[0] = byte(h.Version).
+	return !requiresUnderlyingContext(parent)
 }
 
-// isByteConversion reports whether fun is the builtin byte conversion, written
-// literally as byte(...). byte and uint8 are identical to the type checker, so
-// the two spellings are distinguished at the syntax level.
-func isByteConversion(fun ast.Expr) bool {
-	ident, ok := fun.(*ast.Ident)
+// requiresUnderlyingContext reports whether parent is a position that forces a
+// named value to be converted to its underlying type, making the conversion
+// required rather than droppable. An assignment solely to the blank identifier
+// imposes no type and does not count.
+func requiresUnderlyingContext(parent ast.Node) bool {
+	switch p := parent.(type) {
+	case *ast.AssignStmt:
+		return !assignsOnlyToBlank(p)
+	case *ast.ReturnStmt, *ast.CallExpr, *ast.CompositeLit, *ast.KeyValueExpr:
+		return true
+	default:
+		return false
+	}
+}
 
-	return ok && ident.Name == "byte"
+// assignsOnlyToBlank reports whether every left-hand side of assign is the blank
+// identifier, so the assignment requires no particular type.
+func assignsOnlyToBlank(assign *ast.AssignStmt) bool {
+	for _, lhs := range assign.Lhs {
+		ident, ok := lhs.(*ast.Ident)
+		if !ok || ident.Name != "_" {
+			return false
+		}
+	}
+
+	return true
 }

@@ -5131,22 +5131,35 @@ func Test_redundantConversions(t *testing.T) {
 		assert.Empty(t, redundantConversions(pkg))
 	})
 
-	t.Run("does not flag byte conversion of a named type", func(t *testing.T) {
-		// byte(h.Version) serializes a named type into a []byte and is required;
-		// the byte() spelling marks intentional wire encoding, so it is spared.
-		src := "package example\n\ntype Version uint8\n\nvar v Version = 1\n\nvar _ = byte(v)\n"
+	t.Run("does not flag named-to-underlying conversion in a return", func(t *testing.T) {
+		// return uint8(h.Version & 0x0F): the uint8 result type makes the
+		// conversion required.
+		src := "package example\n\ntype Version uint8\n\ntype Header struct{ Version Version }\n\nfunc (h *Header) Minor() uint8 { return uint8(h.Version & 0x0F) }\n"
 		pkg := buildTypedPackage(t, "example.go", src)
 
 		assert.Empty(t, redundantConversions(pkg))
 	})
 
-	t.Run("still flags uint8 conversion of a named type", func(t *testing.T) {
-		// Only the byte() spelling is spared; uint8() remains flagged.
-		src := "package example\n\ntype Version uint8\n\nvar v Version = 1\n\nvar _ = uint8(v)\n"
+	t.Run("does not flag named-to-underlying conversion stored in a byte slice", func(t *testing.T) {
+		// buf[0] = byte(h.Version): the []byte element forces the conversion.
+		src := "package example\n\ntype Version uint8\n\ntype Header struct{ Version Version }\n\nfunc (h *Header) enc(buf []byte) { buf[0] = byte(h.Version) }\n"
 		pkg := buildTypedPackage(t, "example.go", src)
 
-		require.Len(t, redundantConversions(pkg), 1)
-		assert.Contains(t, redundantConversions(pkg)[0], "redundant conversion to 'uint8'")
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag named-to-underlying conversion as a call argument", func(t *testing.T) {
+		src := "package example\n\ntype Version uint8\n\nfunc sink(uint8) {}\n\nfunc use(v Version) { sink(uint8(v)) }\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
+	})
+
+	t.Run("does not flag named-to-underlying conversion assigned to a typed target", func(t *testing.T) {
+		src := "package example\n\ntype Version uint8\n\nfunc use(v Version) { var x uint8; x = uint8(v); _ = x }\n"
+		pkg := buildTypedPackage(t, "example.go", src)
+
+		assert.Empty(t, redundantConversions(pkg))
 	})
 
 	t.Run("does not flag string to byte slice conversion", func(t *testing.T) {
