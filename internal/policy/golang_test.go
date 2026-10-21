@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 
-	"github.com/vitalvas/yake/internal/config"
+	"go.vitalvas.com/yake/internal/config"
 )
 
 func boolPtr(v bool) *bool          { return &v }

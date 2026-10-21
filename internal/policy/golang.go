@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/vitalvas/yake/internal/config"
+	"go.vitalvas.com/yake/internal/config"
 )
 
 const (

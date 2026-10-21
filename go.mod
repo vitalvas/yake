@@ -1,4 +1,4 @@
-module github.com/vitalvas/yake
+module go.vitalvas.com/yake
 
 go 1.27.1
 

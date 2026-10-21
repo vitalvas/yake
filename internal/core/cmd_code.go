@@ -6,10 +6,10 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/vitalvas/yake/internal/github"
-	"github.com/vitalvas/yake/internal/goreleaser"
-	"github.com/vitalvas/yake/internal/linter"
-	"github.com/vitalvas/yake/internal/tools"
+	"go.vitalvas.com/yake/internal/github"
+	"go.vitalvas.com/yake/internal/goreleaser"
+	"go.vitalvas.com/yake/internal/linter"
+	"go.vitalvas.com/yake/internal/tools"
 )
 
 func createLinterNewCommand() *cobra.Command {

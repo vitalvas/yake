@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vitalvas/yake/internal/config"
-	"github.com/vitalvas/yake/internal/policy"
+	"go.vitalvas.com/yake/internal/config"
+	"go.vitalvas.com/yake/internal/policy"
 )
 
 // ensureProjectRoot verifies the current directory is the project root by

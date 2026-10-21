@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/vitalvas/yake/internal/policy"
+	"go.vitalvas.com/yake/internal/policy"
 )
 
 func createPolicyCommand() *cobra.Command {

@@ -5,7 +5,7 @@ Yet Another ToolKit -- a CLI tool for enforcing development standards and genera
 ## Installation
 
 ```bash
-GOPRIVATE=github.com/vitalvas/yake go install -v github.com/vitalvas/yake@latest
+go install -v go.vitalvas.com/yake@latest
 ```
 
 ## Configuration

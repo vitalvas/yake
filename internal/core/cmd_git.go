@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/vitalvas/yake/internal/githook"
+	"go.vitalvas.com/yake/internal/githook"
 )
 
 func createGitCommand() *cobra.Command {

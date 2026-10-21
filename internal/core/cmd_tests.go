@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vitalvas/yake/internal/config"
+	"go.vitalvas.com/yake/internal/config"
 )
 
 var taskTimeout = time.Minute
