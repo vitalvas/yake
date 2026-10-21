@@ -10,7 +10,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/vitalvas/yake/internal/config"
 )
+
+func boolPtr(v bool) *bool { return &v }
 
 func Test_runCommand(t *testing.T) {
 	t.Run("runs successful command", func(t *testing.T) {
@@ -139,7 +143,7 @@ func Test_runGoTests(t *testing.T) {
 		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := runGoTests(nil)
+		err := runGoTests(config.TestsConfig{Govulncheck: &config.PolicyToggle{Enabled: boolPtr(false)}})
 
 		assert.NoError(t, err)
 	})
@@ -154,7 +158,10 @@ func Test_runGoTests(t *testing.T) {
 		require.NoError(t, os.WriteFile("go.mod", []byte("module testproject\n\ngo 1.21\n"), 0644))
 		require.NoError(t, os.WriteFile("main.go", []byte("package main\n\nfunc main() {}\n"), 0644))
 
-		err := runGoTests([]string{"integration", "e2e"})
+		err := runGoTests(config.TestsConfig{
+			Tags:        []string{"integration", "e2e"},
+			Govulncheck: &config.PolicyToggle{Enabled: boolPtr(false)},
+		})
 
 		assert.NoError(t, err)
 	})
@@ -167,7 +174,7 @@ func Test_runGoTests(t *testing.T) {
 		os.Chdir(tmpDir)
 
 		// No go.mod means "go fmt ./..." will fail
-		err := runGoTests(nil)
+		err := runGoTests(config.TestsConfig{})
 
 		assert.Error(t, err)
 	})
@@ -202,6 +209,98 @@ func Test_runGoreleaserCheck(t *testing.T) {
 		err := runGoreleaserCheck()
 
 		assert.NoError(t, err)
+	})
+}
+
+func Test_runGovulncheck(t *testing.T) {
+	t.Run("skips when disabled even if installed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		// A failing fake binary on PATH must never run when the check is disabled.
+		binDir := writeFakeExecutable(t, "govulncheck", 1)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runGovulncheck(false)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("skips when govulncheck not installed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", tmpDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runGovulncheck(true)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("passes when govulncheck finds no vulnerabilities", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		binDir := writeFakeExecutable(t, "govulncheck", 0)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runGovulncheck(true)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns error when govulncheck reports vulnerabilities", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		binDir := writeFakeExecutable(t, "govulncheck", 1)
+
+		origPath := os.Getenv("PATH")
+		os.Setenv("PATH", binDir)
+		defer os.Setenv("PATH", origPath)
+
+		err := runGovulncheck(true)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to run")
+	})
+}
+
+func Test_govulncheckEnabled(t *testing.T) {
+	t.Run("enabled when section absent", func(t *testing.T) {
+		assert.True(t, govulncheckEnabled(config.TestsConfig{}))
+	})
+
+	t.Run("enabled when flag unset", func(t *testing.T) {
+		assert.True(t, govulncheckEnabled(config.TestsConfig{Govulncheck: &config.PolicyToggle{}}))
+	})
+
+	t.Run("enabled when explicitly true", func(t *testing.T) {
+		assert.True(t, govulncheckEnabled(config.TestsConfig{Govulncheck: &config.PolicyToggle{Enabled: boolPtr(true)}}))
+	})
+
+	t.Run("disabled when explicitly false", func(t *testing.T) {
+		assert.False(t, govulncheckEnabled(config.TestsConfig{Govulncheck: &config.PolicyToggle{Enabled: boolPtr(false)}}))
 	})
 }
 
@@ -389,9 +488,17 @@ func Test_markdownlintSeen(t *testing.T) {
 func writeFakeMarkdownlint(t *testing.T, exitCode int) string {
 	t.Helper()
 
+	return writeFakeExecutable(t, "markdownlint", exitCode)
+}
+
+// writeFakeExecutable creates a stub executable with the given name that exits
+// with exitCode, and returns the directory holding it.
+func writeFakeExecutable(t *testing.T, name string, exitCode int) string {
+	t.Helper()
+
 	binDir := t.TempDir()
 	script := fmt.Sprintf("#!/bin/sh\nexit %d\n", exitCode)
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "markdownlint"), []byte(script), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, name), []byte(script), 0755))
 
 	return binDir
 }

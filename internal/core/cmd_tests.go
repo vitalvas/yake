@@ -31,7 +31,7 @@ func createTestsCommand() *cobra.Command {
 			}
 
 			if hasGoPackages() {
-				if err := runGoTests(cfg.Tests.Tags); err != nil {
+				if err := runGoTests(cfg.Tests); err != nil {
 					return err
 				}
 			}
@@ -125,8 +125,8 @@ func hasGoPackages() bool {
 	return len(bytes.TrimSpace(out)) > 0
 }
 
-func runGoTests(tags []string) error {
-	commands := goTestCommands(tags)
+func runGoTests(cfg config.TestsConfig) error {
+	commands := goTestCommands(cfg.Tags)
 
 	if _, err := os.Stat(".golangci.yml"); err == nil {
 		commands = append(commands, command{name: "golangci-lint", args: []string{"run"}})
@@ -138,7 +138,17 @@ func runGoTests(tags []string) error {
 		}
 	}
 
-	return nil
+	return runGovulncheck(govulncheckEnabled(cfg))
+}
+
+// govulncheckEnabled reports whether the govulncheck step should run. It is on
+// by default; only an explicit "enable: false" under tests disables it.
+func govulncheckEnabled(cfg config.TestsConfig) bool {
+	if cfg.Govulncheck == nil || cfg.Govulncheck.Enabled == nil {
+		return true
+	}
+
+	return *cfg.Govulncheck.Enabled
 }
 
 func runCommand(name string, args ...string) error {
@@ -176,6 +186,22 @@ func runRustTests() error {
 	}
 
 	return nil
+}
+
+// runGovulncheck scans the module for known vulnerabilities. It is skipped when
+// disabled by config or when the govulncheck binary is not installed.
+// govulncheck ./... exits non-zero when it finds a vulnerability, which surfaces
+// as a failed check.
+func runGovulncheck(enabled bool) error {
+	if !enabled {
+		return nil
+	}
+
+	if _, err := exec.LookPath("govulncheck"); err != nil {
+		return nil
+	}
+
+	return runCommand("govulncheck", "./...")
 }
 
 func runGoreleaserCheck() error {

@@ -40,7 +40,7 @@ func createRunCommand() *cobra.Command {
 			goPackages := hasGoPackages()
 
 			if goPackages {
-				if err := runGoTests(cfg.Tests.Tags); err != nil {
+				if err := runGoTests(cfg.Tests); err != nil {
 					return err
 				}
 			}

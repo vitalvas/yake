@@ -57,6 +57,8 @@ tests:
   tags:
     - integration
     - e2e
+  govulncheck:
+    enable: false
 `
 		require.NoError(t, os.WriteFile(File, []byte(content), 0644))
 
@@ -74,6 +76,7 @@ tests:
 		assert.False(t, *cfg.Policy.StringConcat.Enabled)
 		assert.False(t, *cfg.Policy.RedundantConversion.Enabled)
 		assert.Equal(t, []string{"integration", "e2e"}, cfg.Tests.Tags)
+		assert.False(t, *cfg.Tests.Govulncheck.Enabled)
 	})
 
 	t.Run("returns error on invalid yaml", func(t *testing.T) {

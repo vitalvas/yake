@@ -29,7 +29,8 @@ type Config struct {
 }
 
 type TestsConfig struct {
-	Tags []string `yaml:"tags"`
+	Tags        []string      `yaml:"tags"`
+	Govulncheck *PolicyToggle `yaml:"govulncheck"`
 }
 
 type PolicyConfig struct {
