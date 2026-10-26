@@ -32,6 +32,12 @@ var policySubcommands = []*cobra.Command{
 				}
 			}
 
+			if _, err := os.Stat("Cargo.toml"); err == nil {
+				if err := policy.RunRustChecks(); err != nil {
+					return err
+				}
+			}
+
 			log.Println("All policy checks passed")
 
 			return nil

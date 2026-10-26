@@ -24,8 +24,9 @@ const (
 )
 
 type Config struct {
-	Policy PolicyConfig `yaml:"policy"`
-	Tests  TestsConfig  `yaml:"tests"`
+	Policy     PolicyConfig     `yaml:"policy"`
+	RustPolicy RustPolicyConfig `yaml:"rust_policy"`
+	Tests      TestsConfig      `yaml:"tests"`
 }
 
 type TestsConfig struct {
@@ -49,6 +50,10 @@ type PolicyConfig struct {
 	TestDuration           *TestDurationPolicy     `yaml:"test_duration"`
 	Coverage               *CoveragePolicy         `yaml:"coverage"`
 	RedundantConversion    *PolicyToggle           `yaml:"redundant_conversion"`
+}
+
+type RustPolicyConfig struct {
+	ASCIIOnly *PolicyToggle `yaml:"ascii_only"`
 }
 
 type PolicyToggle struct {

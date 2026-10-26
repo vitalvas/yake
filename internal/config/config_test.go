@@ -53,6 +53,9 @@ func TestLoad(t *testing.T) {
     enable: false
   redundant_conversion:
     enable: false
+rust_policy:
+  ascii_only:
+    enable: false
 tests:
   tags:
     - integration
@@ -75,6 +78,7 @@ tests:
 		assert.False(t, *cfg.Policy.ASCIIOnly.Enabled)
 		assert.False(t, *cfg.Policy.StringConcat.Enabled)
 		assert.False(t, *cfg.Policy.RedundantConversion.Enabled)
+		assert.False(t, *cfg.RustPolicy.ASCIIOnly.Enabled)
 		assert.Equal(t, []string{"integration", "e2e"}, cfg.Tests.Tags)
 		assert.False(t, *cfg.Tests.Govulncheck.Enabled)
 	})

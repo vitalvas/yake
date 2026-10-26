@@ -29,6 +29,7 @@ const (
 	MinCoveragePercent = 80.0
 	minFunctionLines   = 5
 	skipDirective      = "//yake:skip-test"
+	skipASCIIDirective = "//yake:skip-ascii"
 )
 
 type golangPolicyCheck struct {
@@ -550,15 +551,27 @@ func findNonASCIIChars(filePath string) []string {
 	}
 
 	var violations []string
+	var lineViolations []string
+	lineStart := 0
 	line := 1
 	column := 1
+
+	flush := func(lineEnd int) {
+		if !bytes.Contains(data[lineStart:lineEnd], []byte(skipASCIIDirective)) {
+			violations = append(violations, lineViolations...)
+		}
+
+		lineViolations = lineViolations[:0]
+	}
 
 	for offset := 0; offset < len(data); {
 		b := data[offset]
 		if b == '\n' {
+			flush(offset)
 			line++
 			column = 1
 			offset++
+			lineStart = offset
 			continue
 		}
 
@@ -570,16 +583,18 @@ func findNonASCIIChars(filePath string) []string {
 
 		r, size := utf8.DecodeRune(data[offset:])
 		if r == utf8.RuneError && size == 1 {
-			violations = append(violations,
+			lineViolations = append(lineViolations,
 				fmt.Sprintf("  - %s:%d:%d: non-ASCII byte 0x%X", filePath, line, column, b))
 		} else {
-			violations = append(violations,
+			lineViolations = append(lineViolations,
 				fmt.Sprintf("  - %s:%d:%d: non-ASCII character U+%04X", filePath, line, column, r))
 		}
 
 		column++
 		offset += size
 	}
+
+	flush(len(data))
 
 	return violations
 }

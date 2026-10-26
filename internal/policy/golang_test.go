@@ -1073,6 +1073,30 @@ func Test_findNonASCIIChars(t *testing.T) {
 		assert.Contains(t, violations[0], "0xFF")
 	})
 
+	t.Run("skips line carrying skip-ascii directive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := fmt.Sprintf("package main\n\nconst value = %q //yake:skip-ascii\n", nonASCIIFixtureWord())
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findNonASCIIChars(path)
+
+		assert.Empty(t, violations)
+	})
+
+	t.Run("directive does not leak to other lines", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.go")
+		code := fmt.Sprintf("package main\n\nconst a = %q //yake:skip-ascii\nconst b = %q\n",
+			nonASCIIFixtureWord(), nonASCIIFixtureWord())
+		require.NoError(t, os.WriteFile(path, []byte(code), 0644))
+
+		violations := findNonASCIIChars(path)
+
+		require.Len(t, violations, 1)
+		assert.Contains(t, violations[0], "test.go:4:")
+	})
+
 	t.Run("returns nil for non-existent file", func(t *testing.T) {
 		violations := findNonASCIIChars("/nonexistent/file.go")
 
