@@ -3,6 +3,7 @@ package policy
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -105,6 +106,95 @@ func Test_checkRustASCIIOnly(t *testing.T) {
 		require.NoError(t, os.WriteFile("notes.txt", []byte(code), 0644))
 
 		err := checkRustASCIIOnly()
+
+		assert.NoError(t, err)
+	})
+}
+
+func Test_checkCargoTomlNoComment(t *testing.T) {
+	t.Run("passes with no comments", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("Cargo.toml", []byte("[package]\nname = \"x\"\n"), 0644))
+
+		err := checkCargoTomlNoComment()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("passes when Cargo.toml is absent", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		err := checkCargoTomlNoComment()
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("detects full-line comment", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("Cargo.toml", []byte("[package]\n# a note\nname = \"x\"\n"), 0644))
+
+		err := checkCargoTomlNoComment()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Cargo.toml:2:1")
+	})
+
+	t.Run("detects trailing comment", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("Cargo.toml", []byte("[package]\nname = \"x\" # note\n"), 0644))
+
+		err := checkCargoTomlNoComment()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Cargo.toml:2:12")
+	})
+
+	t.Run("detects comment in a sub-crate Cargo.toml", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("Cargo.toml", []byte("[workspace]\n"), 0644))
+		require.NoError(t, os.MkdirAll("crates/app", 0755))
+		require.NoError(t, os.WriteFile("crates/app/Cargo.toml", []byte("[package]\n# note\nname = \"app\"\n"), 0644))
+
+		err := checkCargoTomlNoComment()
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), fmt.Sprintf("%s:2:1", filepath.Join("crates", "app", "Cargo.toml")))
+	})
+
+	t.Run("ignores hash inside a string value", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.WriteFile("Cargo.toml", []byte("[package]\ncolor = \"#fff\"\nname = 'a#b'\n"), 0644))
+
+		err := checkCargoTomlNoComment()
 
 		assert.NoError(t, err)
 	})

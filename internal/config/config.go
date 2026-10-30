@@ -53,7 +53,8 @@ type PolicyConfig struct {
 }
 
 type RustPolicyConfig struct {
-	ASCIIOnly *PolicyToggle `yaml:"ascii_only"`
+	ASCIIOnly     *PolicyToggle `yaml:"ascii_only"`
+	NoTomlComment *PolicyToggle `yaml:"no_toml_comment"`
 }
 
 type PolicyToggle struct {
