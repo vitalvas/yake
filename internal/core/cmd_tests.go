@@ -176,7 +176,7 @@ func runRustTests() error {
 	commands := []command{
 		{name: "cargo", args: []string{"fmt", "--check"}},
 		{name: "cargo", args: []string{"clippy", "--", "-D", "warnings"}},
-		{name: "cargo", args: []string{"test"}},
+		{name: "cargo", args: []string{"test", "--", "--quiet"}},
 	}
 
 	for _, cmdInfo := range commands {
