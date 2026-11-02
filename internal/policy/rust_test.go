@@ -185,6 +185,21 @@ func Test_checkCargoTomlNoComment(t *testing.T) {
 		assert.Contains(t, err.Error(), fmt.Sprintf("%s:2:1", filepath.Join("crates", "app", "Cargo.toml")))
 	})
 
+	t.Run("skips Cargo.toml under target", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		require.NoError(t, os.MkdirAll("target/debug", 0755))
+		require.NoError(t, os.WriteFile("target/debug/Cargo.toml", []byte("[package]\n# note\n"), 0644))
+
+		err := checkCargoTomlNoComment()
+
+		assert.NoError(t, err)
+	})
+
 	t.Run("ignores hash inside a string value", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()

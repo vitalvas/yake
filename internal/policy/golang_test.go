@@ -5083,7 +5083,7 @@ func buildTypedPackage(t *testing.T, filename, src string) *packages.Package {
 }
 
 func Test_skipPolicyDir(t *testing.T) {
-	skipped := []string{"vendor", ".git", ".tmp", "test", "tests", "examples"}
+	skipped := []string{"vendor", ".git", ".tmp", "target", "test", "tests", "examples"}
 	for _, name := range skipped {
 		t.Run(fmt.Sprintf("skips %s", name), func(t *testing.T) {
 			assert.True(t, skipPolicyDir(name))

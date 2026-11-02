@@ -271,12 +271,14 @@ func resolvePackageOverrides(p *config.CoveragePolicy) map[string]float64 {
 }
 
 // skippedDirs are directory names the policy walkers never descend into:
-// dependency and VCS metadata, dedicated test/example trees, and .tmp, the
-// agent's scratch directory, whose files are not project source.
+// dependency and VCS metadata, the Rust build output, dedicated test/example
+// trees, and .tmp, the agent's scratch directory, whose files are not project
+// source.
 var skippedDirs = map[string]bool{
 	"vendor":   true,
 	".git":     true,
 	".tmp":     true,
+	"target":   true,
 	"test":     true,
 	"tests":    true,
 	"examples": true,
