@@ -118,7 +118,7 @@ func codeGithubReleasePleaseWorkflow(cfg releasePleaseConfig) error {
 
 	log.Println("Creating .github/workflows/release-please.yml")
 
-	workflow := github.GetReleasePleaseWorkflow(branch, cfg.GoReleaser)
+	workflow := github.GetReleasePleaseWorkflow(branch, goreleaser.DetectDist(), cfg.GoReleaser)
 
 	data, err := workflow.Marshal()
 	if err != nil {

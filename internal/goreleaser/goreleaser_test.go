@@ -1,6 +1,7 @@
 package goreleaser
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -155,5 +156,51 @@ func TestConfigMarshal(t *testing.T) {
 
 		content := string(data)
 		assert.Contains(t, content, "{{ .Version }}-{{ .CommitTimestamp }}-{{ .ShortCommit }}")
+	})
+}
+
+func TestDetectDist(t *testing.T) {
+	t.Run("returns dist default when no config file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+
+		assert.Equal(t, "dist", DetectDist())
+	})
+
+	t.Run("reads dist from config file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		require.NoError(t, os.WriteFile(".goreleaser.yml", []byte("version: 2\ndist: _dist_build/\n"), 0644))
+
+		assert.Equal(t, "_dist_build/", DetectDist())
+	})
+
+	t.Run("returns dist default when config omits dist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		require.NoError(t, os.WriteFile(".goreleaser.yaml", []byte("version: 2\n"), 0644))
+
+		assert.Equal(t, "dist", DetectDist())
+	})
+
+	t.Run("prefers .goreleaser.yaml over other names", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		require.NoError(t, os.WriteFile(".goreleaser.yaml", []byte("dist: fromyaml\n"), 0644))
+		require.NoError(t, os.WriteFile(".goreleaser.yml", []byte("dist: fromyml\n"), 0644))
+
+		assert.Equal(t, "fromyaml", DetectDist())
 	})
 }

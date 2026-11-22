@@ -1,8 +1,12 @@
 package github
 
-import "os"
+import (
+	"fmt"
+	"os"
+	"strings"
+)
 
-func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
+func GetReleasePleaseWorkflow(branch, dist string, goreleaser bool) Workflow {
 	jobs := OrderedJobs{
 		{
 			Name: "release-please",
@@ -35,7 +39,7 @@ func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
 				Name:   "Build and release packages",
 				RunsOn: "ubuntu-latest",
 				Needs:  []string{"release-please"},
-				Steps:  goreleaserSteps(),
+				Steps:  goreleaserSteps(dist),
 			},
 		})
 	}
@@ -51,12 +55,13 @@ func GetReleasePleaseWorkflow(branch string, goreleaser bool) Workflow {
 			Contents:     "write",
 			Issues:       "write",
 			PullRequests: "write",
+			IDToken:      "write",
 		},
 		Jobs: jobs,
 	}
 }
 
-func goreleaserSteps() []WorkflowStep {
+func goreleaserSteps(dist string) []WorkflowStep {
 	steps := []WorkflowStep{
 		{
 			Name: "Checkout code",
@@ -102,9 +107,39 @@ func goreleaserSteps() []WorkflowStep {
 				"TAG":          "${{ needs.release-please.outputs.tag_name }}",
 			},
 		},
+		WorkflowStep{
+			Name: "Check artifact uploader secret",
+			ID:   "check-uploader",
+			Run:  `if [ -n "$UPLOAD_URL" ]; then echo "available=true" >> "$GITHUB_OUTPUT"; fi`,
+			Env: map[string]string{
+				"UPLOAD_URL": "${{ secrets.ARTIFACT_UPLOADER_URL }}",
+			},
+		},
+		WorkflowStep{
+			Name: "Upload artifacts",
+			If:   "${{ steps.check-uploader.outputs.available == 'true' }}",
+			Env: map[string]string{
+				"UPLOAD_URL": "${{ secrets.ARTIFACT_UPLOADER_URL }}",
+				"PREFIX":     "${{ needs.release-please.outputs.release_created == 'true' && 'release' || 'snapshot' }}",
+			},
+			Run: artifactUploadScript(dist),
+		},
 	)
 
 	return steps
+}
+
+func artifactUploadScript(dist string) string {
+	dist = strings.TrimRight(dist, "/")
+	if dist == "" {
+		dist = "dist"
+	}
+
+	return fmt.Sprintf(`TOKEN=$(curl -sSf  -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r '.value')
+for f in $(jq -r '.[] | select(.type=="Archive" or .type=="Linux Package") | .path' %s/artifacts.json); do
+  curl -sSf -w "\n" -X PUT -H "Authorization: Bearer $TOKEN" --data-binary "@$f" "${UPLOAD_URL%%/}/$PREFIX/$(basename "$f")"
+done
+`, dist)
 }
 
 type ReleasePleaseConfig struct {

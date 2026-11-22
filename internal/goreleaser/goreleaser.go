@@ -3,9 +3,39 @@ package goreleaser
 import (
 	"bytes"
 	"fmt"
+	"os"
 
 	"gopkg.in/yaml.v3"
 )
+
+// configFiles lists the GoReleaser config filenames in the order GoReleaser
+// itself resolves them.
+var configFiles = []string{".goreleaser.yaml", ".goreleaser.yml", "goreleaser.yaml", "goreleaser.yml"}
+
+// DetectDist returns the dist directory configured in the project's GoReleaser
+// config file. When no config file exists or it does not set dist, it returns
+// GoReleaser's default of "dist".
+func DetectDist() string {
+	for _, name := range configFiles {
+		data, err := os.ReadFile(name)
+		if err != nil {
+			continue
+		}
+
+		var cfg Config
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			continue
+		}
+
+		if cfg.Dist != "" {
+			return cfg.Dist
+		}
+
+		break
+	}
+
+	return "dist"
+}
 
 type Config struct {
 	Version   int       `yaml:"version"`

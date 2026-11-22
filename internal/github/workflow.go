@@ -52,6 +52,7 @@ type WorkflowPermissions struct {
 	Contents     string `yaml:"contents,omitempty"`
 	Issues       string `yaml:"issues,omitempty"`
 	PullRequests string `yaml:"pull-requests,omitempty"`
+	IDToken      string `yaml:"id-token,omitempty"`
 }
 
 type OrderedJobs []JobEntry
