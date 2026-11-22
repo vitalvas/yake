@@ -129,7 +129,7 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 		releaseStep := job.Steps[2]
 		assert.Equal(t, "Run GoReleaser", releaseStep.Name)
-		assert.Equal(t, "${{ needs.release-please.outputs.release_created }}", releaseStep.If)
+		assert.Equal(t, "${{ needs.release-please.outputs.release_created == 'true' }}", releaseStep.If)
 		assert.Equal(t, "release --clean", releaseStep.With["args"])
 		assert.Equal(t, "${{ secrets.GITHUB_TOKEN }}", releaseStep.Env["GITHUB_TOKEN"])
 		assert.Equal(t, "${{ needs.release-please.outputs.tag_name }}", releaseStep.Env["TAG"])
