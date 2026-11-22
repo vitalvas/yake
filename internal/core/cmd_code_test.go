@@ -517,6 +517,52 @@ func TestCodeGoreleaser(t *testing.T) {
 		err := codeGoreleaser(goreleaserConfig{})
 		assert.Error(t, err)
 	})
+
+	t.Run("adds dist directory to gitignore", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		initTestGitRepo(t, "main")
+
+		gitCmd := exec.Command("git", "remote", "add", "origin", "git@github.com:myowner/myapp.git")
+		require.NoError(t, gitCmd.Run())
+
+		require.NoError(t, codeGoreleaser(goreleaserConfig{}))
+
+		content, readErr := os.ReadFile(".gitignore")
+		require.NoError(t, readErr)
+
+		str := string(content)
+		assert.Contains(t, str, "/_dist_build\n")
+		assert.NotContains(t, str, "/target")
+		assert.NotContains(t, str, "/.zig-cache")
+	})
+
+	t.Run("adds rust directories to gitignore when Cargo.toml exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		initTestGitRepo(t, "main")
+
+		gitCmd := exec.Command("git", "remote", "add", "origin", "git@github.com:myowner/myapp.git")
+		require.NoError(t, gitCmd.Run())
+
+		require.NoError(t, os.WriteFile("Cargo.toml", []byte("[package]\n"), 0644))
+
+		require.NoError(t, codeGoreleaser(goreleaserConfig{}))
+
+		content, readErr := os.ReadFile(".gitignore")
+		require.NoError(t, readErr)
+
+		str := string(content)
+		assert.Contains(t, str, "/_dist_build\n")
+		assert.Contains(t, str, "/target\n")
+		assert.Contains(t, str, "/.zig-cache\n")
+	})
 }
 
 func TestCodeGithubLangGolang(t *testing.T) {
