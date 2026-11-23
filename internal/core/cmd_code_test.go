@@ -353,6 +353,40 @@ func TestCreateGithubReleasePleaseCommand(t *testing.T) {
 		_, statErr := os.Stat(".github/workflows/release-please.yml")
 		assert.NoError(t, statErr)
 	})
+
+	goreleaserCases := []struct {
+		name       string
+		args       []string
+		configFile bool
+		want       bool
+	}{
+		{name: "goreleaser job enabled by default when config exists", args: []string{"--force"}, configFile: true, want: true},
+		{name: "goreleaser job omitted without config or flag", args: []string{"--force"}, configFile: false, want: false},
+		{name: "goreleaser flag forces job without config", args: []string{"--force", "--goreleaser"}, configFile: false, want: true},
+	}
+
+	for _, tc := range goreleaserCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			originalDir, _ := os.Getwd()
+			defer os.Chdir(originalDir)
+
+			os.Chdir(tmpDir)
+			initTestGitRepo(t, "main")
+
+			if tc.configFile {
+				require.NoError(t, os.WriteFile(".goreleaser.yml", []byte(""), 0644))
+			}
+
+			cmd := createGithubReleasePleaseCommand()
+			cmd.SetArgs(tc.args)
+			require.NoError(t, cmd.Execute())
+
+			workflow, err := os.ReadFile(filepath.Join(".github", "workflows", "release-please.yml"))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, strings.Contains(string(workflow), "goreleaser/goreleaser-action"))
+		})
+	}
 }
 
 func TestCreateGithubLangGolangCommand(t *testing.T) {

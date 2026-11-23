@@ -76,6 +76,10 @@ func createGithubReleasePleaseCommand() *cobra.Command {
 			force, _ := cmd.Flags().GetBool("force")
 			goreleaser, _ := cmd.Flags().GetBool("goreleaser")
 
+			if _, err := os.Stat(".goreleaser.yml"); err == nil {
+				goreleaser = true
+			}
+
 			cfg := releasePleaseConfig{
 				Force:      force,
 				GoReleaser: goreleaser,
@@ -94,7 +98,7 @@ func createGithubReleasePleaseCommand() *cobra.Command {
 	}
 
 	cmd.Flags().Bool("force", false, "Re-create workflow file if it already exists")
-	cmd.Flags().Bool("goreleaser", false, "Add GoReleaser job to the workflow")
+	cmd.Flags().Bool("goreleaser", false, "Add GoReleaser job to the workflow (enabled automatically when .goreleaser.yml exists)")
 
 	return cmd
 }
