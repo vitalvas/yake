@@ -90,7 +90,7 @@ func goreleaserSteps(dist string) []WorkflowStep {
 			},
 			WorkflowStep{
 				Name: "Cache Rust artifacts",
-				Uses: "actions/cache@v5",
+				Uses: "actions/cache@v6",
 				With: map[string]string{
 					"path":         "~/.cargo/registry\n~/.cargo/git\n~/.cache/zig\ntarget\n",
 					"key":          "rust-artifacts-${{ runner.os }}-${{ hashFiles('Cargo.lock', '.goreleaser.yml', '.github/workflows/release-please.yml') }}",
