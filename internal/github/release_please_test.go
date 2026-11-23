@@ -100,6 +100,34 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 		assert.Equal(t, "Upload artifacts", job.Steps[5].Name)
 	})
 
+	t.Run("goreleaser job includes Zig setup and Rust cache when Cargo.toml exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		os.Chdir(tmpDir)
+		require.NoError(t, os.WriteFile("Cargo.toml", []byte("[package]\nname = \"test\"\n"), 0644))
+
+		result := GetReleasePleaseWorkflow("main", "dist", true)
+		job, _ := result.Jobs.Get("goreleaser")
+		require.Len(t, job.Steps, 7)
+
+		assert.Equal(t, "Checkout code", job.Steps[0].Name)
+
+		zigStep := job.Steps[1]
+		assert.Equal(t, "Setup Zig", zigStep.Name)
+		assert.Equal(t, "mlugg/setup-zig@v2", zigStep.Uses)
+
+		cacheStep := job.Steps[2]
+		assert.Equal(t, "Cache Rust artifacts", cacheStep.Name)
+		assert.Equal(t, "actions/cache@v5", cacheStep.Uses)
+		assert.Equal(t, "~/.cargo/registry\n~/.cargo/git\n~/.cache/zig\ntarget\n", cacheStep.With["path"])
+		assert.Equal(t, "rust-artifacts-${{ runner.os }}-${{ hashFiles('Cargo.lock', '.goreleaser.yml', '.github/workflows/release-please.yml') }}", cacheStep.With["key"])
+		assert.Equal(t, "rust-artifacts-${{ runner.os }}-", cacheStep.With["restore-keys"])
+
+		assert.Equal(t, "Test GoReleaser", job.Steps[3].Name)
+	})
+
 	t.Run("goreleaser test step runs snapshot on non-release", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		originalDir, _ := os.Getwd()

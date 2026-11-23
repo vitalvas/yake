@@ -82,6 +82,24 @@ func goreleaserSteps(dist string) []WorkflowStep {
 		})
 	}
 
+	if _, err := os.Stat("Cargo.toml"); err == nil {
+		steps = append(steps,
+			WorkflowStep{
+				Name: "Setup Zig",
+				Uses: "mlugg/setup-zig@v2",
+			},
+			WorkflowStep{
+				Name: "Cache Rust artifacts",
+				Uses: "actions/cache@v5",
+				With: map[string]string{
+					"path":         "~/.cargo/registry\n~/.cargo/git\n~/.cache/zig\ntarget\n",
+					"key":          "rust-artifacts-${{ runner.os }}-${{ hashFiles('Cargo.lock', '.goreleaser.yml', '.github/workflows/release-please.yml') }}",
+					"restore-keys": "rust-artifacts-${{ runner.os }}-",
+				},
+			},
+		)
+	}
+
 	steps = append(steps,
 		WorkflowStep{
 			Name: "Test GoReleaser",
