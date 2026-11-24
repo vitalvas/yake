@@ -120,7 +120,7 @@ func TestGetReleasePleaseWorkflow(t *testing.T) {
 
 		cacheStep := job.Steps[2]
 		assert.Equal(t, "Cache Rust artifacts", cacheStep.Name)
-		assert.Equal(t, "actions/cache@v5", cacheStep.Uses)
+		assert.Equal(t, "actions/cache@v6", cacheStep.Uses)
 		assert.Equal(t, "~/.cargo/registry\n~/.cargo/git\n~/.cache/zig\ntarget\n", cacheStep.With["path"])
 		assert.Equal(t, "rust-artifacts-${{ runner.os }}-${{ hashFiles('Cargo.lock', '.goreleaser.yml', '.github/workflows/release-please.yml') }}", cacheStep.With["key"])
 		assert.Equal(t, "rust-artifacts-${{ runner.os }}-", cacheStep.With["restore-keys"])
